@@ -1,6 +1,6 @@
 # HCU Dashboard - Homematic IP
 
-Web-Dashboard fur die Homematic IP Home Control Unit (HCU). Zeigt alle Thermostaten, Wetter, Sicherheit und Gerate in einem hellen, schlanken Interface.
+Web-Dashboard fur die Homematic IP Home Control Unit (HCU). Zeigt alle Thermostaten, Wetter, Sicherheit und Gerate
 
 ## Voraussetzungen
 
