@@ -30,7 +30,7 @@ Dashboard offnen: [http://localhost:5000](http://localhost:5000)
 ## Authentifizierung
 
 Die Datei `auth_token.json` enthalt einen gultigen Auth-Token und Client-ID.
-Falls der Token ablauft, muss ein neuer Aktivierungsschlussel uber die HCU-Weboberflache generiert und in der `main.py` eingetragen werden.
+Falls der Token ablauft, muss ein neuer Aktivierungsschlussel uber die HCU-Weboberflache generiert oder in der `main.py` eingetragen werden.
 
 ## API-Endpunkte
 
