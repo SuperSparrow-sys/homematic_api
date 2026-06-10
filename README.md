@@ -41,6 +41,7 @@ Falls der Token ablauft, muss ein neuer Aktivierungsschlussel uber die HCU-Webob
 | `/api/refresh` | GET | Cache manuell aktualisieren |
 | `/api/set-temp` | POST | Solltemperatur setzen `{"group_id":"...","temperature":21.0}` |
 | `/api/set-mode` | POST | Modus andern `{"group_id":"...","mode":"AUTO"}` (AUTO, ECO, MANUAL) |
+| `/api/renew-token` | POST | Token erneuern `{"activation_key":"<KEY>"}` |
 
 ## Projektstruktur
 

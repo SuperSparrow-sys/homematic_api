@@ -36,6 +36,36 @@ def load_token():
     return None, None
 
 
+def save_token(auth_token, client_id):
+    with open(TOKEN_FILE, "w", encoding="utf-8") as f:
+        json.dump({"auth_token": auth_token, "client_id": client_id}, f)
+
+
+def renew_token(activation_key):
+    try:
+        resp1 = rest_post("/hmip/auth/requestConnectApiAuthToken", {
+            "activationKey": activation_key,
+            "pluginId": PLUGIN_ID,
+            "friendlyName": PLUGIN_NAME,
+        })
+        auth_token = resp1.get("authToken")
+        if not auth_token:
+            return False, "Kein authToken in Antwort: " + json.dumps(resp1)[:200]
+
+        resp2 = rest_post("/hmip/auth/confirmConnectApiAuthToken", {
+            "activationKey": activation_key,
+            "authToken": auth_token,
+        })
+        client_id = resp2.get("clientId")
+        if not client_id:
+            return False, "Kein clientId in Bestaetigung: " + json.dumps(resp2)[:200]
+
+        save_token(auth_token, client_id)
+        return True, "Authentifizierung erfolgreich"
+    except Exception as e:
+        return False, f"Fehler: {e}"
+
+
 async def _send_ws_command(auth_token, path, body, timeout=8):
     headers = {"authtoken": auth_token, "plugin-id": PLUGIN_ID, "hmip-system-events": "true"}
     async with websockets.connect(HCU_WS, ssl=ssl_ctx, additional_headers=headers, max_size=2**23) as ws:
@@ -259,6 +289,16 @@ def api_set_mode():
     if not gid or not mode:
         return jsonify({"ok": False, "error": "group_id und mode erforderlich"}), 400
     ok, msg = set_mode_sync(gid, mode)
+    return jsonify({"ok": ok, "msg": msg})
+
+
+@app.route("/api/renew-token", methods=["POST"])
+def api_renew_token():
+    body = request.get_json(force=True)
+    activation_key = body.get("activation_key")
+    if not activation_key:
+        return jsonify({"ok": False, "error": "activation_key erforderlich"}), 400
+    ok, msg = renew_token(str(activation_key).strip())
     return jsonify({"ok": ok, "msg": msg})
 
 

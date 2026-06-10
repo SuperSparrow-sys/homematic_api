@@ -57,7 +57,20 @@ tr:hover td { background: #f5f5f5; }
   <span class="status-item">Ger&auml;te: <strong id="dev-count">-</strong></span>
   <span class="status-item">Heizkreise: <strong id="heat-count">-</strong></span>
   <span class="status-item" id="alarm-indicator"></span>
+  <span class="status-item" id="auth-indicator"></span>
   <button class="refresh-btn" onclick="refresh()">Aktualisieren</button>
+  <button class="refresh-btn" onclick="showAuthDialog()">Auth</button>
+</div>
+
+<div id="auth-dialog" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;padding:24px;border-radius:8px;max-width:400px;margin:20vh auto;box-shadow:0 4px 20px rgba(0,0,0,.2)">
+    <h3 style="margin-bottom:12px">Authentifizierung</h3>
+    <p style="font-size:.85rem;color:#666;margin-bottom:12px">Aktivierungsschlussel aus der HCU-Weboberflache eingeben:</p>
+    <input id="auth-key-input" type="text" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;font-size:1rem;margin-bottom:12px" placeholder="z.B. B32D39" />
+    <button class="refresh-btn" onclick="doAuth()" style="width:100%">Authentifizieren</button>
+    <p id="auth-result" style="margin-top:8px;font-size:.85rem"></p>
+    <button onclick="hideAuthDialog()" style="margin-top:8px;background:none;border:none;color:#666;cursor:pointer;font-size:.85rem">Schlie&szlig;en</button>
+  </div>
 </div>
 <div class="grid" id="weather-cards"></div>
 <div id="warnings"></div>
@@ -77,11 +90,41 @@ tr:hover td { background: #f5f5f5; }
 </thead><tbody></tbody></table></div>
 <script>
 let data = null, setting = {};
+
+async function showAuthDialog() {
+  document.getElementById('auth-dialog').style.display = 'flex';
+  document.getElementById('auth-result').textContent = '';
+}
+function hideAuthDialog() {
+  document.getElementById('auth-dialog').style.display = 'none';
+}
+async function doAuth() {
+  const key = document.getElementById('auth-key-input').value.trim();
+  if (!key) { document.getElementById('auth-result').textContent = 'Schlussel eingeben'; return; }
+  const el = document.getElementById('auth-result');
+  el.textContent = 'Authentifiziere...';
+  try {
+    const r = await fetch('/api/renew-token', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({activation_key:key})});
+    const res = await r.json();
+    el.textContent = res.msg;
+    el.style.color = res.ok ? '#16a34a' : '#c00';
+    if (res.ok) { document.getElementById('auth-key-input').value = ''; setTimeout(() => { hideAuthDialog(); refresh(); }, 1500); }
+  } catch(e) { el.textContent = 'Netzwerkfehler'; el.style.color = '#c00'; }
+}
+
+async function checkAuth() {
+  try {
+    const r = await fetch('/api/data');
+    if (r.status === 503) document.getElementById('auth-indicator').innerHTML = '<span class="err">[nicht auth.]</span>';
+    else document.getElementById('auth-indicator').innerHTML = '<span class="ok">[auth. OK]</span>';
+  } catch(e) { document.getElementById('auth-indicator').innerHTML = ''; }
+}
+
 async function refresh() {
   await fetch('/api/refresh');
   const r = await fetch('/api/data');
-  if (!r.ok) return;
-  data = await r.json(); render();
+  if (!r.ok) { data = null; render(); await checkAuth(); return; }
+  data = await r.json(); render(); await checkAuth();
 }
 async function setTemp(gid, temp) {
   if (setting[gid]) return;
