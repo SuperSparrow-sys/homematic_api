@@ -13,7 +13,7 @@ Web-Dashboard fur die Homematic IP Home Control Unit (HCU). Zeigt alle Thermosta
 ```bash
 # Repository klonen
 git clone <repo-url>
-cd PW-Oertel
+cd HCU-Automation
 
 # Abhangigkeiten installieren
 pip install flask websockets

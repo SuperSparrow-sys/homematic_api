@@ -5,8 +5,8 @@ from flask import Flask, jsonify, render_template, request
 HCU_IP = "192.168.0.90"
 HCU_HOST = f"https://{HCU_IP}:6969"
 HCU_WS  = f"wss://{HCU_IP}:9001"
-PLUGIN_ID   = "de.jonat.pw-oertel.hcu-bridge"
-PLUGIN_NAME = {"de": "PW Oertel HCU Bridge"}
+PLUGIN_ID   = "de.local.hcu-bridge"
+PLUGIN_NAME = {"de": "HCU Bridge"}
 TOKEN_FILE  = os.path.join(os.path.dirname(__file__), "auth_token.json")
 
 app = Flask(__name__)
