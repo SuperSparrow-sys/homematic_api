@@ -1,205 +1,111 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HCU Dashboard</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HCU Bridge</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Segoe UI',Arial,sans-serif; background: #fff; color: #222; padding: 24px; }
-h1 { font-size: 1.5rem; color: #000; margin-bottom: 2px; }
-h2 { font-size: 1.1rem; color: #000; margin: 24px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #ccc; }
-.sub { color: #666; font-size: .85rem; margin-bottom: 16px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap: 12px; margin-bottom: 16px; }
-.card { background: #f8f8f8; border-radius: 8px; padding: 16px; border: 1px solid #ddd; }
-.card h3 { font-size: .8rem; color: #888; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
-.card .val { font-size: 1.6rem; font-weight: 700; color: #000; }
-.card .val small { font-size: .8rem; font-weight: 400; color: #888; }
-.card .row { display: flex; justify-content: space-between; padding: 3px 0; font-size: .85rem; }
-.card .label { color: #666; }
-.card .warn { color: #d97706; }
-.card .err { color: #c00; }
-.card .ok { color: #16a34a; }
-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
-th { text-align: left; padding: 10px 8px; color: #666; font-weight: 600; border-bottom: 2px solid #ccc; white-space: nowrap; }
-td { padding: 8px; border-bottom: 1px solid #eee; }
-tr:hover td { background: #f5f5f5; }
-.badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: .75rem; font-weight: 600; }
-.badge-open { background: #f8d7da; color: #721c24; }
-.badge-closed { background: #d6d8db; color: #383d41; }
-.temp { font-weight: 700; }
-.temp-warm { color: #c00; }
-.temp-cold { color: #2563eb; }
-.refresh-btn { background: #222; color: #fff; border: none; padding: 8px 20px; border-radius: 6px; cursor: pointer; font-size: .85rem; font-weight: 500; }
-.refresh-btn:hover { background: #444; }
-.refresh-btn:disabled { opacity: .5; cursor: default; }
-.status-bar { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; padding: 12px 16px; background: #f8f8f8; border-radius: 8px; border: 1px solid #ddd; }
-.status-item { font-size: .82rem; color: #666; }
-.status-item strong { color: #000; }
-.warnings { border-left: 4px solid #c00; background: #f8f8f8; }
-.warnings h3 { color: #c00; }
-.inp-temp { width: 60px; padding: 3px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: .82rem; text-align:center; }
-.btn-set { background: #222; color: #fff; border: none; padding: 3px 10px; border-radius: 4px; cursor: pointer; font-size: .75rem; margin-left: 4px; }
-.btn-set:hover { background: #444; }
-.btn-set:disabled { opacity: .4; cursor: default; }
-.toast { position: fixed; bottom: 20px; right: 20px; padding: 10px 20px; border-radius: 6px; color: #fff; font-size: .85rem; z-index: 999; }
-.toast-ok { background: #16a34a; }
-.toast-err { background: #c00; }
-.mode-select { padding: 2px 4px; border: 1px solid #ccc; border-radius: 4px; font-size: .8rem; background: #fff; cursor: pointer; }
-@media(max-width:600px){ .grid { grid-template-columns: 1fr; } body { padding: 12px; } }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:#f5f5f5;color:#111;padding:16px}
+h1{font-size:1.2rem;margin-bottom:4px}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tabs button{padding:6px 16px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:.85rem}
+.tabs button.active{background:#111;color:#fff;border-color:#111}
+.panel{display:none}.panel.active{display:block}
+.status{font-size:.8rem;margin-bottom:8px;display:flex;gap:12px;flex-wrap:wrap}
+.ok{color:#16a34a}.err{color:#dc2626}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);font-size:.75rem}
+th{background:#e5e7eb;padding:5px 4px;text-align:center;white-space:nowrap}
+td{padding:4px;text-align:center;border-top:1px solid #e5e7eb}
+td.l{text-align:left;font-weight:500}
+ .auto{color:#16a34a;font-weight:600}.automatic{color:#16a34a;font-weight:600}.eco{color:#2563eb;font-weight:600}.manual{color:#dc2626;font-weight:600}
+.badge{display:inline-block;padding:0 4px;border-radius:3px;font-size:.65rem}
+.bo{background:#fef3c7;color:#92400e}.pa{background:#fce7f3;color:#9d174d}
+input[type=number]{width:58px;padding:2px 4px;font-size:.75rem;text-align:center;border:1px solid #ccc;border-radius:4px}
+select{padding:2px 4px;font-size:.75rem;border:1px solid #ccc;border-radius:4px}
+pre{background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:8px;font-size:.7rem;overflow:auto;max-height:80vh;white-space:pre-wrap;word-break:break-all}
+code{font-family:'Cascadia Code','Fira Code','Consolas',monospace}
 </style>
 </head>
 <body>
-<h1>HCU Dashboard</h1>
-<div class="sub">Homematic IP &ndash; Gebaudeautomation</div>
-<div class="status-bar">
-  <span class="status-item">Letztes Update: <strong id="ts">-</strong></span>
-  <span class="status-item">Ger&auml;te: <strong id="dev-count">-</strong></span>
-  <span class="status-item">Heizkreise: <strong id="heat-count">-</strong></span>
-  <span class="status-item" id="alarm-indicator"></span>
-  <span class="status-item" id="auth-indicator"></span>
-  <button class="refresh-btn" onclick="refresh()">Aktualisieren</button>
-  <button class="refresh-btn" onclick="showAuthDialog()">Auth</button>
+<h1>HCU Bridge</h1>
+<div class="tabs">
+<button class="active" onclick="switchTab('hcu')">HCU</button>
+<button onclick="switchTab('modbus')">Modbus (SPS)</button>
+<button onclick="switchTab('raw')">Raw JSON</button>
 </div>
-
-<div id="auth-dialog" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4);z-index:1000;align-items:center;justify-content:center">
-  <div style="background:#fff;padding:24px;border-radius:8px;max-width:400px;margin:20vh auto;box-shadow:0 4px 20px rgba(0,0,0,.2)">
-    <h3 style="margin-bottom:12px">Authentifizierung</h3>
-    <p style="font-size:.85rem;color:#666;margin-bottom:12px">Aktivierungsschlussel aus der HCU-Weboberflache eingeben:</p>
-    <input id="auth-key-input" type="text" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;font-size:1rem;margin-bottom:12px" placeholder="z.B. B32D39" />
-    <button class="refresh-btn" onclick="doAuth()" style="width:100%">Authentifizieren</button>
-    <p id="auth-result" style="margin-top:8px;font-size:.85rem"></p>
-    <button onclick="hideAuthDialog()" style="margin-top:8px;background:none;border:none;color:#666;cursor:pointer;font-size:.85rem">Schlie&szlig;en</button>
-  </div>
+<div id="tab-hcu" class="panel active">
+<div class="status" id="hcu-status">Lade...</div>
+<table><thead><tr>
+<th>Raum</th><th>Soll</th><th>Ist</th><th>Modus</th><th>Ventil</th><th>Boost</th><th>Party</th><th>Fenster</th><th>Fehler</th><th></th>
+</tr></thead><tbody id="hcu-tbody"></tbody></table>
 </div>
-<div class="grid" id="weather-cards"></div>
-<div id="warnings"></div>
-<h2>Heizungs&uuml;bersicht</h2>
-<div style="overflow-x:auto"><table id="heating-table"><thead>
-<tr><th>Raum</th><th>Ist-Temp</th><th>Soll-Temp</th><th>Ventil</th><th>Modus</th><th>Fenster</th><th>Profil</th><th>Status</th></tr>
-</thead><tbody></tbody></table></div>
-<h2>Klima</h2>
-<div style="overflow-x:auto"><table id="climate-table"><thead>
-<tr><th>Raum</th><th>Fenster</th><th>Status</th></tr>
-</thead><tbody></tbody></table></div>
-<h2>Sicherheitsstatus</h2>
-<div class="grid" id="security-cards"></div>
-<h2>Ger&auml;te&uuml;bersicht</h2>
-<div style="overflow-x:auto"><table id="device-table"><thead>
-<tr><th>Typ</th><th>Bezeichnung</th><th>Modell</th><th>FW</th><th>Erreichbar</th><th>Kan&auml;le</th></tr>
-</thead><tbody></tbody></table></div>
+<div id="tab-modbus" class="panel">
+<div class="status" id="mb-status">Lade...</div>
+<table><thead><tr>
+<th>Raum</th><th>Soll</th><th>Ist</th><th>Modus</th><th>Ventil%</th><th>Boost</th><th>Party</th><th>Fenster</th><th>Fehler</th>
+</tr></thead><tbody id="mb-tbody"></tbody></table>
+</div>
+<div id="tab-raw" class="panel">
+<div class="status" id="raw-status">Lade...</div>
+<pre><code id="raw-json"></code></pre>
+</div>
 <script>
-let data = null, setting = {};
-
-async function showAuthDialog() {
-  document.getElementById('auth-dialog').style.display = 'flex';
-  document.getElementById('auth-result').textContent = '';
+function switchTab(t){
+ document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+ document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+ document.querySelector('.tabs button[onclick*="'+t+'"]').classList.add('active');
+ document.getElementById('tab-'+t).classList.add('active');
 }
-function hideAuthDialog() {
-  document.getElementById('auth-dialog').style.display = 'none';
+async function loadHCU(){
+ try{
+  const r=await fetch('/api/data'); const d=await r.json();
+  const s=document.getElementById('hcu-status');
+  if(d.error){s.innerHTML='<span class=err>'+d.error+'</span>';return}
+  const w=d.weather||{};
+  s.innerHTML='<span class=ok>&#10003;</span> Wetter: '+(w.temperature||'?')+'°C '+((w.humidity||'?')+'%').padStart(2);
+  document.getElementById('hcu-tbody').innerHTML=d.heating.map(r=>
+   '<tr><td class=l>'+r.raum+'</td>'
+   +'<td>'+r.soll_temp.toFixed(1)+'</td><td>'+r.ist_temp.toFixed(1)+'</td>'
+   +'<td class='+r.modus.toLowerCase()+'>'+r.modus+'</td>'
+   +'<td>'+(r.ventil*100).toFixed(0)+'%</td>'
+    +'<td>'+(r.boost?'<span class="badge bo">BOOST</span>':'')+'</td>'
+    +'<td>'+(r.party?'<span class="badge pa">PARTY</span>':'')+'</td>'
+    +'<td'+(r.fenster==='OPEN'?' style=color:#dc2626':'')+'>'+(r.fenster==='OPEN'?'OFFEN':r.fenster||'-')+'</td>'
+   +'<td>'+(r.unreach?'U ':'')+(r.lowbat?'B ':'')+(r.heating_failure?'HF ':'')+'</td>'
+   +'<td><input type=number step=0.5 value='+r.soll_temp.toFixed(1)+' style=width:58px onchange="setTemp(\''+r.id+'\',this.value)">'
+    +'<select onchange="setMode(\''+r.id+'\',this.value)"><option'+(r.modus==='AUTOMATIC'?' selected':'')+'>AUTOMATIC</option><option'+(r.modus==='ECO'?' selected':'')+'>ECO</option><option'+(r.modus==='MANUAL'?' selected':'')+'>MANUAL</option></select></td></tr>'
+  ).join('');
+ }catch(e){document.getElementById('hcu-status').innerHTML='<span class=err>Fehler</span>'}
+ setTimeout(loadHCU,3000);
 }
-async function doAuth() {
-  const key = document.getElementById('auth-key-input').value.trim();
-  if (!key) { document.getElementById('auth-result').textContent = 'Schlussel eingeben'; return; }
-  const el = document.getElementById('auth-result');
-  el.textContent = 'Authentifiziere...';
-  try {
-    const r = await fetch('/api/renew-token', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({activation_key:key})});
-    const res = await r.json();
-    el.textContent = res.msg;
-    el.style.color = res.ok ? '#16a34a' : '#c00';
-    if (res.ok) { document.getElementById('auth-key-input').value = ''; setTimeout(() => { hideAuthDialog(); refresh(); }, 1500); }
-  } catch(e) { el.textContent = 'Netzwerkfehler'; el.style.color = '#c00'; }
+async function loadMB(){
+ try{
+  const r=await fetch('/api/modbus'); const d=await r.json();
+  document.getElementById('mb-status').innerHTML='<span class=ok>&#10003;</span> '+d.aussentemp_c.toFixed(1)+'°C '+d.feuchte.toFixed(0)+'%';
+  document.getElementById('mb-tbody').innerHTML=d.rooms.map(r=>
+   '<tr><td class=l>'+r.name+'</td>'
+   +'<td>'+r.soll_c.toFixed(1)+'</td><td>'+r.ist_c.toFixed(1)+'</td>'
+   +'<td class='+(r.mode_raw===0?'auto':r.mode_raw===1?'eco':'manual')+'>'+r.mode+'</td>'
+   +'<td>'+r.ventil_pct.toFixed(1)+'</td>'
+   +'<td>'+(r.boost?'<span class="badge bo">BOOST</span>':'')+'</td>'
+   +'<td>'+(r.party?'<span class="badge pa">PARTY</span>':'')+'</td>'
+   +'<td>'+(r.fenster===1?'OFFEN':r.fenster===0?'ZU':'-')+'</td>'
+   +'<td>'+r.fehler+'</td></tr>'
+  ).join('');
+ }catch(e){document.getElementById('mb-status').innerHTML='<span class=err>Fehler</span>'}
+ setTimeout(loadMB,3000);
 }
-
-async function checkAuth() {
-  try {
-    const r = await fetch('/api/data');
-    if (r.status === 503) document.getElementById('auth-indicator').innerHTML = '<span class="err">[nicht auth.]</span>';
-    else document.getElementById('auth-indicator').innerHTML = '<span class="ok">[auth. OK]</span>';
-  } catch(e) { document.getElementById('auth-indicator').innerHTML = ''; }
+async function loadJSON(){
+ try{
+  const r=await fetch('/api/data'); const d=await r.json();
+  document.getElementById('raw-status').innerHTML='<span class=ok>&#10003;</span> '+d.heating_count+' Gruppen, '+d.device_count+' Gerate, '+d.timestamp;
+  document.getElementById('raw-json').textContent=JSON.stringify(d,null,2);
+ }catch(e){document.getElementById('raw-status').innerHTML='<span class=err>Fehler</span>'}
+ setTimeout(loadJSON,5000);
 }
-
-async function refresh() {
-  await fetch('/api/refresh');
-  const r = await fetch('/api/data');
-  if (!r.ok) { data = null; render(); await checkAuth(); return; }
-  data = await r.json(); render(); await checkAuth();
-}
-async function setTemp(gid, temp) {
-  if (setting[gid]) return;
-  setting[gid] = true;
-  const btn = document.getElementById('btn-'+gid);
-  if (btn) { btn.disabled = true; btn.textContent = '...'; }
-  try {
-    const r = await fetch('/api/set-temp', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_id:gid,temperature:temp})});
-    const res = await r.json();
-    showToast(res.ok ? 'Solltemperatur auf '+temp+'\u00b0C' : 'Fehler: '+(res.msg||'?'), res.ok);
-    if (res.ok) setTimeout(refresh, 1500);
-  } catch(e) { showToast('Netzwerkfehler', false); }
-  finally { setting[gid] = false; if (btn) { btn.disabled = false; btn.textContent = 'Setzen'; } }
-}
-async function setMode(gid, mode) {
-  const sel = document.getElementById('mode-'+gid);
-  if (sel) sel.disabled = true;
-  try {
-    const r = await fetch('/api/set-mode', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_id:gid,mode:mode})});
-    const res = await r.json();
-    showToast(res.ok ? 'Modus: '+mode : 'Fehler: '+(res.msg||'?'), res.ok);
-    if (res.ok) setTimeout(refresh, 1500);
-  } catch(e) { showToast('Netzwerkfehler', false); }
-  finally { if (sel) sel.disabled = false; }
-}
-function showToast(msg, ok) {
-  const el = document.createElement('div');
-  el.className = 'toast ' + (ok ? 'toast-ok' : 'toast-err');
-  el.textContent = msg; document.body.appendChild(el);
-  setTimeout(() => el.remove(), 3000);
-}
-function render() {
-  if (!data) return;
-  document.getElementById('ts').textContent = data.timestamp || '-';
-  document.getElementById('dev-count').textContent = data.device_count || 0;
-  document.getElementById('heat-count').textContent = data.heating_count || 0;
-  const alarmEl = document.getElementById('alarm-indicator');
-  alarmEl.innerHTML = data.alarm_active ? '<span style="color:#c00;font-weight:600">ALARM AKTIV</span>' : '<span style="color:#16a34a">Kein Alarm</span>';
-  const w = data.weather || {};
-  document.getElementById('weather-cards').innerHTML = `
-    <div class="card"><h3>Temperatur</h3><div class="val">${w.temperature??'?'} <small>\u00b0C</small></div></div>
-    <div class="card"><h3>Gef\u00fchlt</h3><div class="val">${w.minTemperature??'?'} &ndash; ${w.maxTemperature??'?'} <small>\u00b0C</small></div></div>
-    <div class="card"><h3>Luftfeuchte</h3><div class="val">${w.humidity??'?'} <small>%</small></div></div>
-    <div class="card"><h3>Wind</h3><div class="val">${w.windSpeed??'?'} <small>km/h</small><br><small>aus ${w.windDirection??'?'}\u00b0</small></div></div>
-    <div class="card"><h3>Wetterlage</h3><div class="val" style="font-size:1rem">${(w.weatherCondition||'?').replace(/_/g,' ')}</div></div>`;
-  const warns = data.warnungen || [];
-  document.getElementById('warnings').innerHTML = warns.length ? `<div class="card warnings"><h3>Warnungen (${warns.length})</h3>${warns.map(w=>'<div class="row"><span class="err">\u26a0 '+w+'</span></div>').join('')}</div>` : '';
-  const hbody = document.getElementById('heating-table').querySelector('tbody');
-  hbody.innerHTML = (data.heating||[]).map(h=>{
-    const ist = h.ist_temp!=null ? h.ist_temp.toFixed(1) : '?', soll = h.soll_temp!=null ? h.soll_temp.toFixed(1) : '';
-    const vent = h.ventil!=null ? (h.ventil*100).toFixed(0)+'%' : '?';
-    const fenClass = h.fenster==='OPEN'?'badge-open':'badge-closed';
-    const tempClass = (h.ist_temp!=null&&h.ist_temp>24)?'temp-warm':(h.ist_temp!=null&&h.ist_temp<18)?'temp-cold':'';
-    const icons = [];
-    if (h.unreach) icons.push('<span class="err">[unreach]</span>');
-    if (h.lowbat) icons.push('<span class="err">[lowbat]</span>');
-    if (h.boost) icons.push('<span class="warn">[Boost]</span>');
-    if (h.party) icons.push('<span class="warn">[Party]</span>');
-    if (h.heating_failure) icons.push('<span class="err">[Heizfehler]</span>');
-    const gid = h.id, curMode = h.modus||'ECO';
-    return `<tr><td>${h.raum}</td><td class="temp ${tempClass}">${ist}\u00b0</td><td><input class="inp-temp" id="inp-${gid}" type="number" step="0.5" min="5" max="30" value="${soll}"><button class="btn-set" id="btn-${gid}" onclick="setTemp('${gid}',parseFloat(document.getElementById('inp-${gid}').value))">Setzen</button></td><td class="ventil">${vent}</td><td><select class="mode-select" id="mode-${gid}" onchange="setMode('${gid}',this.value)"><option value="AUTOMATIC" ${curMode==='AUTOMATIC'?'selected':''}>AUTO</option><option value="ECO" ${curMode==='ECO'?'selected':''}>ECO</option><option value="MANUAL" ${curMode==='MANUAL'?'selected':''}>MANUAL</option></select></td><td>${h.fenster?`<span class="badge ${fenClass}">${h.fenster}</span>`:'-'}</td><td>${h.profil||'-'}</td><td>${icons.join(' ')||'-'}</td></tr>`;
-  }).join('');
-  const cbody = document.getElementById('climate-table').querySelector('tbody');
-  cbody.innerHTML = (data.climate||[]).map(c=>{
-    const fenClass = c.fenster==='OPEN'?'badge-open':'badge-closed';
-    return `<tr><td>${c.raum}</td><td>${c.fenster?`<span class="badge ${fenClass}">${c.fenster}</span>`:'-'}</td><td>${c.unreach?'<span class="err">unreach</span>':'<span class="ok">ok</span>'}</td></tr>`;
-  }).join('');
-  const secEl = document.getElementById('security-cards');
-  const sec = data.sicherheit||{};
-  secEl.innerHTML = Object.entries(sec).map(([n,s])=>`<div class="card"><h3>${n}</h3><div class="row"><span class="label">${Object.entries(s).filter(([k])=>k!=='zone').map(([k,v])=>k+'='+v).join(', ')||'-'}</span></div></div>`).join('');
-  const dbody = document.getElementById('device-table').querySelector('tbody');
-  dbody.innerHTML = (data.devices||[]).map(d=>`<tr><td>${d.type.replace(/_/g,' ').slice(0,30)}</td><td>${d.label}</td><td>${d.model}</td><td>${d.fw}</td><td>${d.reachable?'<span class="ok">ja</span>':'<span class="err">nein</span>'}</td><td style="font-size:.75rem">${(d.channels||[]).map(c=>c.type+' ('+Object.keys(c.werte).length+' Werte)').join('<br>')}</td></tr>`).join('');
-}
-refresh();
-setInterval(refresh, 5000);
+async function setTemp(id,v){await fetch('/api/set-temp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_id:id,temperature:parseFloat(v)})})}
+async function setMode(id,v){await fetch('/api/set-mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_id:id,mode:v})})}
+loadHCU();loadMB();loadJSON();
 </script>
 </body>
 </html>
