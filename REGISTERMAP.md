@@ -13,8 +13,6 @@ Basisadresse pro Raum = `raum_index × 4`.
 | 2 + 4n  | +2 | int16 | **Boost** (0=aus, 1=ein) |
 | 3 + 4n  | +3 | int16 | **Party** (0=aus, 1=ein) |
 
-| 0x1000 (4096) | int16 | Anzahl Räume (read-only) |
-
 ## Input Register (3xxxx) – SPS lesen
 
 Gleiche Adressierung wie Holding.
@@ -29,6 +27,22 @@ Gleiche Adressierung wie Holding.
 | 0x1000 (4096) | int16 | Außentemperatur (×10) |
 | 0x1001 (4097) | int16 | Luftfeuchte (×10) |
 | 0x1002 (4098) | int16 | Wettercode |
+
+## Room-ID (Input Register) – Raum-Erkennung für SPS
+
+Zur Verifikation: Die SPS liest `0x2000 + i` und erwartet Wert `i`.
+
+| Register | Beschreibung |
+|----------|-------------|
+| 0x2000 + n | Room-ID = Index `n` (0–32). Bestätigt Raumzuordnung. |
+
+Beispiel: SPS will Raum #7 lesen → liest IR 0x2007 → erwartet Wert `7`.
+
+## Holding Global
+
+| Register | Beschreibung |
+|----------|-------------|
+| 0x1000 | Anzahl Räume (read-only) |
 
 ## Raum-Index
 

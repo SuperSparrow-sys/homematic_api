@@ -22,18 +22,24 @@ ssl_ctx.verify_mode = ssl.CERT_NONE
 
 RAEUME = [
     "A001 (Werkstatt)","A101 (Schleiferei)","A102 (QS)","A103 (Server)",
-    "A201 (Umkleide Herren)","A202 (IT)","A203 (Vorraum)","A210 (Buro)",
-    "A211 (Buro)","A213 (Besprechung)","C004 (TH)","C102 (Flur)",
-    "C103 (AV)","C104 (Meister)","C106 (WC-D)","C107 (WC)",
-    "C108 (WC-H)","C111 (Aufenthaltsraum)","C202 (Flur)","C203 (Buro)",
-    "D003 (TH)","D004 (Umkleide)","D104 (Besprechung)","D105 (Einkauf)",
-    "D203 (WC-D)","D204 (Konstruktion)","D302 (WC-H)","D303 (WC-D)",
-    "D304 (Kuche)","D305 (Projektleitung)","D306 (Abstellraum)","D307 (Besprechung)",
-    "D308 (Besprechung)",
+     "A201 (Umkleide Herren)","A202 (IT)","A203 (Vorraum)","A210 (Büro)",
+     "A211 (Büro)","A213 (Besprechung)","C004 (TH)","C102 (Flur)",
+     "C103 (AV)","C104 (Meister)","C106 (WC-D)","C107 (WC)",
+     "C108 (WC-H)","C111 (Aufenthaltsraum)","C202 (Flur)","C203 (Büro)",
+     "D003 (TH)","D004 (Umkleide)","D104 (Besprechung)","D105 (Einkauf)",
+     "D203 (WC-D)","D204 (Konstruktion)","D302 (WC-H)","D303 (WC-D)",
+     "D304 (Küche)","D305 (Projektleitung)","D306 (Abstellraum)","D307 (Besprechung)",
+     "D308 (Besprechung)",
 ]
 ROOM_COUNT = len(RAEUME)
 HOLDING_GLOBAL = 0x1000
 INPUT_GLOBAL   = 0x1000
+ROOM_ID_BASE   = 0x2000
+
+def _room_code(label):
+    return label.split(" ")[0] if label else ""
+
+ROOM_CODE_MAP = {_room_code(r): i for i, r in enumerate(RAEUME)}
 
 
 class HoldingBlock(ModbusSparseDataBlock):
@@ -69,13 +75,22 @@ def _sh(a, v): MB[1].setValues(a + 1, [v])
 def _si(a, v): MB[2].setValues(a + 1, [v])
 
 
+GID_BY_CODE = {}
+_INTERNAL_SET = False
+
 def _on_modbus_write(addr, val):
+    global _INTERNAL_SET
+    if _INTERNAL_SET:
+        return
     room = (addr - 1) // 4
     offset = (addr - 1) % 4
     if room < 0 or room >= ROOM_COUNT:
         return
+    code = _room_code(RAEUME[room])
+    gid = GID_BY_CODE.get(code)
+    if not gid:
+        return
     try:
-        gid = list(CACHE.get("groups", {}).keys())[room]
         if offset == 0:
             set_temp_sync(gid, val / 10)
         elif offset == 1:
@@ -207,6 +222,7 @@ def update_cache():
 
 
 def sync_modbus_loop():
+    global _INTERNAL_SET
     while True:
         time.sleep(2)
         with CACHE_LOCK:
@@ -214,19 +230,19 @@ def sync_modbus_loop():
             weather = CACHE.get("home", {}).get("weather", {})
         if not groups:
             continue
+        for i in range(ROOM_COUNT):
+            _si(ROOM_ID_BASE + i, i)
         if weather:
             _si(INPUT_GLOBAL, int(weather.get("temperature", 0) * 10))
             _si(INPUT_GLOBAL + 1, int(weather.get("humidity", 0)))
-        for grp in groups.values():
+        for gid, grp in groups.items():
             if grp.get("type") != "HEATING":
                 continue
-            label = grp.get("label", "")
-            try:
-                i = RAEUME.index(label)
-            except ValueError:
+            code = _room_code(grp.get("label", ""))
+            i = ROOM_CODE_MAP.get(code)
+            if i is None:
                 continue
-            if i >= ROOM_COUNT:
-                break
+            GID_BY_CODE[code] = gid
             addr = i * 4
             ist  = int(grp.get("valveActualTemperature", 0) * 10)
             vent = int(grp.get("valvePosition", 0) * 1000)
@@ -241,10 +257,12 @@ def sync_modbus_loop():
             mode = {"AUTOMATIC": 0, "ECO": 1, "MANUAL": 2}.get(grp.get("controlMode"), 1)
             boost = 1 if grp.get("boostMode") else 0
             party = 1 if grp.get("partyMode") else 0
+            _INTERNAL_SET = True
             _sh(addr, soll)
             _sh(addr + 1, mode)
             _sh(addr + 2, boost)
             _sh(addr + 3, party)
+            _INTERNAL_SET = False
 
 
 @app.route("/")
@@ -292,6 +310,7 @@ def api_modbus():
         addr = i * 4
         rooms.append({
             "i": i, "name": name,
+            "room_id": _gi(ROOM_ID_BASE + i),
             "soll": _gh(addr),               "soll_c": _gh(addr) / 10,
             "mode_raw": _gh(addr + 1),
             "mode": ["AUTO","ECO","MANUAL"][_gh(addr + 1)] if _gh(addr + 1) <= 2 else "?",

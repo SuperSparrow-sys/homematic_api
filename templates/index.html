@@ -42,7 +42,7 @@ code{font-family:'Cascadia Code','Fira Code','Consolas',monospace}
 <div id="tab-modbus" class="panel">
 <div class="status" id="mb-status">Lade...</div>
 <table><thead><tr>
-<th>Raum</th><th>Soll</th><th>Ist</th><th>Modus</th><th>Ventil%</th><th>Boost</th><th>Party</th><th>Fenster</th><th>Fehler</th>
+<th>Raum</th><th>ID</th><th>Soll</th><th>Ist</th><th>Modus</th><th>Ventil%</th><th>Boost</th><th>Party</th><th>Fenster</th><th>Fehler</th>
 </tr></thead><tbody id="mb-tbody"></tbody></table>
 </div>
 <div id="tab-raw" class="panel">
@@ -84,6 +84,7 @@ async function loadMB(){
   document.getElementById('mb-status').innerHTML='<span class=ok>&#10003;</span> '+d.aussentemp_c.toFixed(1)+'°C '+d.feuchte.toFixed(0)+'%';
   document.getElementById('mb-tbody').innerHTML=d.rooms.map(r=>
    '<tr><td class=l>'+r.name+'</td>'
+   +'<td>'+(r.room_id)+'</td>'
    +'<td>'+r.soll_c.toFixed(1)+'</td><td>'+r.ist_c.toFixed(1)+'</td>'
    +'<td class='+(r.mode_raw===0?'auto':r.mode_raw===1?'eco':'manual')+'>'+r.mode+'</td>'
    +'<td>'+r.ventil_pct.toFixed(1)+'</td>'

@@ -13,15 +13,16 @@ PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 502
 
 RAEUME = [
     "A001 (Werkstatt)","A101 (Schleiferei)","A102 (QS)","A103 (Server)",
-    "A201 (Umkleide Herren)","A202 (IT)","A203 (Vorraum)","A210 (Buro)",
-    "A211 (Buro)","A213 (Besprechung)","C004 (TH)","C102 (Flur)",
+    "A201 (Umkleide Herren)","A202 (IT)","A203 (Vorraum)","A210 (Büro)",
+    "A211 (Büro)","A213 (Besprechung)","C004 (TH)","C102 (Flur)",
     "C103 (AV)","C104 (Meister)","C106 (WC-D)","C107 (WC)",
-    "C108 (WC-H)","C111 (Aufenthaltsraum)","C202 (Flur)","C203 (Buro)",
+    "C108 (WC-H)","C111 (Aufenthaltsraum)","C202 (Flur)","C203 (Büro)",
     "D003 (TH)","D004 (Umkleide)","D104 (Besprechung)","D105 (Einkauf)",
     "D203 (WC-D)","D204 (Konstruktion)","D302 (WC-H)","D303 (WC-D)",
-    "D304 (Kuche)","D305 (Projektleitung)","D306 (Abstellraum)","D307 (Besprechung)",
+    "D304 (Küche)","D305 (Projektleitung)","D306 (Abstellraum)","D307 (Besprechung)",
     "D308 (Besprechung)",
 ]
+ROOM_ID_BASE = 0x2000
 
 def e(s): print("  FEHLER: " + s)
 
@@ -100,8 +101,8 @@ def scan():
     print()
 
     # Alle Raeume
-    print("  Raum-Register (je 4 Holding + 4 Input):")
-    print("  %-5s %-28s | HR lesen    | IR lesen    | HR schreiben" % ("Idx", "Raum"))
+    print("  Raum-Register (je 4 Holding + 4 Input + Room-ID):")
+    print("  %-5s %-28s | HR lesen    | IR lesen    | ID" % ("Idx", "Raum"))
     print("  " + "-" * 80)
     for i in range(min(raum_count, ROOM_COUNT)):
         name = RAEUME[i] if i < len(RAEUME) else "Raum %d" % i
@@ -109,6 +110,7 @@ def scan():
         hr_ok = ir_ok = write_ok = False
         hr_vals = ["-", "-", "-", "-"]
         ir_vals = ["-", "-", "-", "-"]
+        room_id = "-"
 
         try:
             rr = c.read_holding_registers(addr, count=4, slave=sid)
@@ -126,22 +128,18 @@ def scan():
         except:
             pass
 
-        # Schreibtest: alten Wert merken, zurueckschreiben
-        if hr_ok:
-            try:
-                old = int(hr_vals[0])
-                c.write_register(addr, old, slave=sid)
-                write_ok = True
-            except:
-                pass
+        try:
+            rr = c.read_input_registers(ROOM_ID_BASE + i, count=1, slave=sid)
+            if rr and not hasattr(rr, 'exception_code') and rr.registers:
+                room_id = rr.registers[0]
+                if room_id != i:
+                    room_id = "!%d" % room_id
+        except:
+            pass
 
         hr_str = "%s/%s/%s/%s" % tuple(hr_vals)
         ir_str = "%s/%s/%s/%s" % tuple(ir_vals)
-        flags = ""
-        if hr_ok: flags += "R"
-        if ir_ok: flags += "r"
-        if write_ok: flags += "W"
-        print("  %-5d %-28s | %-12s | %-12s | %s" % (i, name, hr_str, ir_str, flags if flags else "-"))
+        print("  %-5d %-28s | %-12s | %-12s | %s" % (i, name, hr_str, ir_str, room_id))
 
     # Zusammenfassung
     print()
@@ -152,12 +150,16 @@ def scan():
     print("    HR +1: Modus 0/1/2     IR +1: Ventil 0-1000")
     print("    HR +2: Boost 0/1        IR +2: Fenster 0/1/65535")
     print("    HR +3: Party 0/1        IR +3: Fehler (Bitmask)")
+    print("    IR 0x%03X+i: Room-ID (i)  -> SPS erkennt Raum-Index" % ROOM_ID_BASE)
     print()
     print("  Beispiel Solltemp 21.5 C schreiben:")
     print("    write_register(%d, 215)" % 0)
     print()
     print("  Beispiel Modus AUTO (0) schreiben:")
     print("    write_register(%d, 0)" % 1)
+    print()
+    print("  Room-ID pruefen (SPS):")
+    print("    read_input_registers(0x%X, 1) -> sollte Index liefern" % ROOM_ID_BASE)
 
     c.close()
 
