@@ -41,7 +41,11 @@ In `main.py` oben die HCU-IP anpassen:
 HCU_IP = "192.168.0.90"
 ```
 
-Alle anderen Einstellungen (Ports, Plugins, Raumliste) sind direkt in `main.py`.
+Die Raumliste wird in **`rooms.txt`** gespeichert (eine Zeile pro Raum, Format: `Code (Name)`).
+- Beim ersten Start aus der Default-Liste erzeugt
+- Neue Räume aus der HCU werden automatisch **am Ende angehängt**
+- Die einmal vergebenen Modbus-Indizes bleiben dadurch **stabil**
+- Zum Zurücksetzen: `rooms.txt` löschen und `main.py` neu starten
 
 ## Betrieb
 
@@ -58,7 +62,8 @@ Der Sync-Lauf aktualisiert alle 2 Sekunden die Modbus-Register aus dem HCU-Cache
 
 ## Register-Map (Kurzreferenz)
 
-Pro Raum (Index 0–32): Basis-Adresse = Index × 4, 4 Holding + 4 Input Register.
+Pro Raum (Index 0–n): Basis-Adresse = Index × 4, 4 Holding + 4 Input Register.
+Die Index-Reihenfolge wird durch `rooms.txt` bestimmt und bleibt stabil.
 
 | Offset | Holding (HR) – SPS schreibt | Input (IR) – SPS liest |
 |--------|---------------------------|------------------------|
@@ -88,10 +93,12 @@ read_input_registers(0x2000 + i, 1) → muss Wert i liefern
 | Datei | Zweck |
 |-------|-------|
 | `main.py` | Bridge-Logik (HCU-WebSocket, Modbus-Server, Sync, Dashboard) |
-| `auth_token.json` | Persistierter HCU-Auth-Token (wird automatisch angelegt) |
+| `rooms.txt` | Persistierte Raumliste – **Quelle der Modbus-Index-Reihenfolge** |
+| `auth_token.json` | Persistierter HCU-Auth-Token (wird nur bei manueller Erneuerung geschrieben) |
 | `templates/index.html` | Dashboard (HCU / Modbus / Raw JSON) |
 | `modbus_scan.py` | Diagnose: scannt alle Register, testet Schreibbarkeit, prüft Room-IDs |
 | `REGISTERMAP.md` | Vollständige Register-Dokumentation |
+| `requirements.txt` | Python-Abhängigkeiten für `pip install -r requirements.txt` |
 
 ## Diagnose
 

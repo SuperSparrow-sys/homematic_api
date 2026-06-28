@@ -7,7 +7,7 @@
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,sans-serif;background:#f5f5f5;color:#111;padding:16px}
 h1{font-size:1.2rem;margin-bottom:4px}
-.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tabs{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
 .tabs button{padding:6px 16px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:.85rem}
 .tabs button.active{background:#111;color:#fff;border-color:#111}
 .panel{display:none}.panel.active{display:block}
@@ -17,13 +17,18 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;over
 th{background:#e5e7eb;padding:5px 4px;text-align:center;white-space:nowrap}
 td{padding:4px;text-align:center;border-top:1px solid #e5e7eb}
 td.l{text-align:left;font-weight:500}
- .auto{color:#16a34a;font-weight:600}.automatic{color:#16a34a;font-weight:600}.eco{color:#2563eb;font-weight:600}.manual{color:#dc2626;font-weight:600}
+.auto{color:#16a34a;font-weight:600}.automatic{color:#16a34a;font-weight:600}.eco{color:#2563eb;font-weight:600}.manual{color:#dc2626;font-weight:600}
 .badge{display:inline-block;padding:0 4px;border-radius:3px;font-size:.65rem}
 .bo{background:#fef3c7;color:#92400e}.pa{background:#fce7f3;color:#9d174d}
 input[type=number]{width:58px;padding:2px 4px;font-size:.75rem;text-align:center;border:1px solid #ccc;border-radius:4px}
 select{padding:2px 4px;font-size:.75rem;border:1px solid #ccc;border-radius:4px}
 pre{background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:8px;font-size:.7rem;overflow:auto;max-height:80vh;white-space:pre-wrap;word-break:break-all}
 code{font-family:'Cascadia Code','Fira Code','Consolas',monospace}
+.arr{cursor:pointer;padding:0 4px;user-select:none;font-size:.9rem;color:#555}
+.arr:hover{color:#111}
+.rg{font-size:.7rem}
+.rg td{font-family:'Consolas','Courier New',monospace}
+.s0{color:#999}.s1{color:#16a34a}
 </style>
 </head>
 <body>
@@ -31,6 +36,7 @@ code{font-family:'Cascadia Code','Fira Code','Consolas',monospace}
 <div class="tabs">
 <button class="active" onclick="switchTab('hcu')">HCU</button>
 <button onclick="switchTab('modbus')">Modbus (SPS)</button>
+<button onclick="switchTab('regs')">Register</button>
 <button onclick="switchTab('raw')">Raw JSON</button>
 </div>
 <div id="tab-hcu" class="panel active">
@@ -42,8 +48,23 @@ code{font-family:'Cascadia Code','Fira Code','Consolas',monospace}
 <div id="tab-modbus" class="panel">
 <div class="status" id="mb-status">Lade...</div>
 <table><thead><tr>
-<th>Raum</th><th>ID</th><th>Soll</th><th>Ist</th><th>Modus</th><th>Ventil%</th><th>Boost</th><th>Party</th><th>Fenster</th><th>Fehler</th>
+<th></th><th>Raum</th><th>ID</th><th>Soll</th><th>Ist</th><th>Modus</th><th>Ventil%</th><th>Boost</th><th>Party</th><th>Fenster</th><th>Fehler</th>
 </tr></thead><tbody id="mb-tbody"></tbody></table>
+</div>
+<div id="tab-regs" class="panel">
+<div class="status" id="reg-status">Lade...</div>
+<div style="font-size:.75rem;background:#fff;border-radius:8px;padding:8px 12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+<strong>Register-Map</strong><br>
+<strong>Holding Register (HR)</strong> – SPS schreibt:<br>
+&nbsp;&nbsp;+0 Solltemp x10 &nbsp; +1 Modus 0=AUTO/1=ECO/2=MANUAL &nbsp; +2 Boost &nbsp; +3 Party<br>
+<strong>Input Register (IR)</strong> – SPS liest:<br>
+&nbsp;&nbsp;+0 Isttemp x10 &nbsp; +1 Ventil 0-1000 &nbsp; +2 Fenster 0/1/65535 &nbsp; +3 Fehler (Bitmask)<br>
+<strong>Global:</strong> IR 4096=Aussentemp &nbsp; 4097=Feuchte &nbsp; 4098=Wetter &nbsp; HR 4096=Raumanzahl<br>
+<strong>Room-ID:</strong> IR 8192+i = Index i (0-32) &nbsp; <strong>Basisadresse</strong> = Raumindex x 4
+</div>
+<table class="rg"><thead><tr>
+<th>Adresse</th><th>Belegung</th><th>HR</th><th>IR</th>
+</tr></thead><tbody id="reg-tbody"></tbody></table>
 </div>
 <div id="tab-raw" class="panel">
 <div class="status" id="raw-status">Lade...</div>
@@ -82,8 +103,11 @@ async function loadMB(){
  try{
   const r=await fetch('/api/modbus'); const d=await r.json();
   document.getElementById('mb-status').innerHTML='<span class=ok>&#10003;</span> '+d.aussentemp_c.toFixed(1)+'°C '+d.feuchte.toFixed(0)+'%';
-  document.getElementById('mb-tbody').innerHTML=d.rooms.map(r=>
-   '<tr><td class=l>'+r.name+'</td>'
+  document.getElementById('mb-tbody').innerHTML=d.rooms.map((r,i)=>
+   '<tr><td style=white-space:nowrap>'
+   +(i>0?'<span class=arr onclick="moveRoom('+i+',\'up\')">&#9650;</span>':'<span style=opacity:.2>&#9650;</span>')
+   +(i<d.rooms.length-1?'<span class=arr onclick="moveRoom('+i+',\'down\')">&#9660;</span>':'<span style=opacity:.2>&#9660;</span>')
+   +'</td><td class=l>'+r.name+'</td>'
    +'<td>'+(r.room_id)+'</td>'
    +'<td>'+r.soll_c.toFixed(1)+'</td><td>'+r.ist_c.toFixed(1)+'</td>'
    +'<td class='+(r.mode_raw===0?'auto':r.mode_raw===1?'eco':'manual')+'>'+r.mode+'</td>'
@@ -96,6 +120,28 @@ async function loadMB(){
  }catch(e){document.getElementById('mb-status').innerHTML='<span class=err>Fehler</span>'}
  setTimeout(loadMB,3000);
 }
+async function loadRegs(){
+ try{
+  const r=await fetch('/api/registers'); const d=await r.json();
+  document.getElementById('reg-status').innerHTML='<span class=ok>&#10003;</span> '+d.regs.length+' Register';
+  document.getElementById('reg-tbody').innerHTML=d.regs.map(r=>{
+   const a=parseInt(r.a);
+   let label='';
+   if(a<4096){
+    const ri=Math.floor(a/4),off=a%4;
+    const names=['Soll','Modus','Boost','Party'];
+    label=(off===0?'HR ':'')+names[off];
+   }else if(a>=4096&&a<4099){label='Global'}
+   else if(a>=8192){label='Room-ID'}
+   return '<tr><td>'+a+'</td><td class=l>'+label+'</td><td>'+(r.hr==='-'?'-':r.hr)+'</td><td>'+(r.ir)+'</td></tr>'
+  }).join('');
+ }catch(e){document.getElementById('reg-status').innerHTML='<span class=err>Fehler</span>'}
+ setTimeout(loadRegs,5000);
+}
+async function moveRoom(i,d){await fetch('/api/move-room/'+i+'/'+d,{method:'POST'});loadMB();loadRegs()}
+async function setTemp(id,v){await fetch('/api/set-temp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_id:id,temperature:parseFloat(v)})})}
+async function setMode(id,v){await fetch('/api/set-mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_id:id,mode:v})})}
+loadHCU();loadMB();loadRegs();loadJSON();
 async function loadJSON(){
  try{
   const r=await fetch('/api/data'); const d=await r.json();
@@ -104,9 +150,6 @@ async function loadJSON(){
  }catch(e){document.getElementById('raw-status').innerHTML='<span class=err>Fehler</span>'}
  setTimeout(loadJSON,5000);
 }
-async function setTemp(id,v){await fetch('/api/set-temp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_id:id,temperature:parseFloat(v)})})}
-async function setMode(id,v){await fetch('/api/set-mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_id:id,mode:v})})}
-loadHCU();loadMB();loadJSON();
 </script>
 </body>
 </html>

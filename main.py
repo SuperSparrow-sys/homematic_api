@@ -20,26 +20,60 @@ ssl_ctx = ssl.create_default_context()
 ssl_ctx.check_hostname = False
 ssl_ctx.verify_mode = ssl.CERT_NONE
 
-RAEUME = [
-    "A001 (Werkstatt)","A101 (Schleiferei)","A102 (QS)","A103 (Server)",
-     "A201 (Umkleide Herren)","A202 (IT)","A203 (Vorraum)","A210 (Büro)",
-     "A211 (Büro)","A213 (Besprechung)","C004 (TH)","C102 (Flur)",
-     "C103 (AV)","C104 (Meister)","C106 (WC-D)","C107 (WC)",
-     "C108 (WC-H)","C111 (Aufenthaltsraum)","C202 (Flur)","C203 (Büro)",
-     "D003 (TH)","D004 (Umkleide)","D104 (Besprechung)","D105 (Einkauf)",
-     "D203 (WC-D)","D204 (Konstruktion)","D302 (WC-H)","D303 (WC-D)",
-     "D304 (Küche)","D305 (Projektleitung)","D306 (Abstellraum)","D307 (Besprechung)",
-     "D308 (Besprechung)",
-]
-ROOM_COUNT = len(RAEUME)
+ROOMS_FILE   = os.path.join(os.path.dirname(__file__), "rooms.txt")
 HOLDING_GLOBAL = 0x1000
 INPUT_GLOBAL   = 0x1000
 ROOM_ID_BASE   = 0x2000
 
+_DEFAULT_ROOMS = [
+    "A001 (Werkstatt)","A101 (Schleiferei)","A102 (QS)","A103 (Server)",
+    "A201 (Umkleide Herren)","A202 (IT)","A203 (Vorraum)","A210 (Büro)",
+    "A211 (Büro)","A213 (Besprechung)","C004 (TH)","C102 (Flur)",
+    "C103 (AV)","C104 (Meister)","C106 (WC-D)","C107 (WC)",
+    "C108 (WC-H)","C111 (Aufenthaltsraum)","C202 (Flur)","C203 (Büro)",
+    "D003 (TH)","D004 (Umkleide)","D104 (Besprechung)","D105 (Einkauf)",
+    "D203 (WC-D)","D204 (Konstruktion)","D302 (WC-H)","D303 (WC-D)",
+    "D304 (Küche)","D305 (Projektleitung)","D306 (Abstellraum)","D307 (Besprechung)",
+    "D308 (Besprechung)",
+]
+
+RAEUME = []
+ROOM_COUNT = 0
+ROOM_CODE_MAP = {}
+
 def _room_code(label):
     return label.split(" ")[0] if label else ""
 
-ROOM_CODE_MAP = {_room_code(r): i for i, r in enumerate(RAEUME)}
+def load_rooms():
+    global RAEUME, ROOM_COUNT, ROOM_CODE_MAP
+    if os.path.exists(ROOMS_FILE):
+        with open(ROOMS_FILE, encoding="utf-8") as f:
+            RAEUME = [line.strip() for line in f if line.strip()]
+    else:
+        RAEUME = list(_DEFAULT_ROOMS)
+        with open(ROOMS_FILE, "w", encoding="utf-8") as f:
+            f.write("\n".join(RAEUME) + "\n")
+    ROOM_COUNT = len(RAEUME)
+    ROOM_CODE_MAP = {_room_code(r): i for i, r in enumerate(RAEUME)}
+
+def save_rooms():
+    if not os.path.exists(ROOMS_FILE):
+        with open(ROOMS_FILE, "w", encoding="utf-8") as f:
+            f.write("\n".join(RAEUME) + "\n")
+        return
+    with open(ROOMS_FILE, "r", encoding="utf-8") as f:
+        existing = [line.strip() for line in f if line.strip()]
+    existing_set = set(existing)
+    new_entries = [r for r in RAEUME if r not in existing_set]
+    if new_entries:
+        with open(ROOMS_FILE, "a", encoding="utf-8") as f:
+            f.write("\n".join(new_entries) + "\n")
+
+def rewrite_rooms():
+    with open(ROOMS_FILE, "w", encoding="utf-8") as f:
+        f.write("\n".join(RAEUME) + "\n")
+
+load_rooms()
 
 
 class HoldingBlock(ModbusSparseDataBlock):
@@ -47,7 +81,7 @@ class HoldingBlock(ModbusSparseDataBlock):
         d = {}
         for i in range(ROOM_COUNT):
             a = i * 4
-            d[a + 1] = 150; d[a + 2] = 1; d[a + 3] = 0; d[a + 4] = 0
+            d[a + 1] = 0; d[a + 2] = 0; d[a + 3] = 0; d[a + 4] = 0
         d[HOLDING_GLOBAL + 1] = ROOM_COUNT
         super().__init__(d)
 
@@ -62,8 +96,10 @@ class InputBlock(ModbusSparseDataBlock):
         d = {}
         for i in range(ROOM_COUNT):
             a = i * 4
-            d[a + 1] = 200; d[a + 2] = 0; d[a + 3] = 65535; d[a + 4] = 0
-        d[INPUT_GLOBAL + 1] = 137; d[INPUT_GLOBAL + 2] = 720; d[INPUT_GLOBAL + 3] = 1
+            d[a + 1] = 0; d[a + 2] = 0; d[a + 3] = 65535; d[a + 4] = 0
+        d[INPUT_GLOBAL + 1] = 0; d[INPUT_GLOBAL + 2] = 0; d[INPUT_GLOBAL + 3] = 0
+        for i in range(ROOM_COUNT):
+            d[ROOM_ID_BASE + i + 1] = 65535
         super().__init__(d)
 
 
@@ -222,7 +258,7 @@ def update_cache():
 
 
 def sync_modbus_loop():
-    global _INTERNAL_SET
+    global _INTERNAL_SET, ROOM_COUNT, ROOM_CODE_MAP
     while True:
         time.sleep(2)
         with CACHE_LOCK:
@@ -232,6 +268,7 @@ def sync_modbus_loop():
             continue
         for i in range(ROOM_COUNT):
             _si(ROOM_ID_BASE + i, i)
+        _sh(HOLDING_GLOBAL, ROOM_COUNT)
         if weather:
             _si(INPUT_GLOBAL, int(weather.get("temperature", 0) * 10))
             _si(INPUT_GLOBAL + 1, int(weather.get("humidity", 0)))
@@ -239,9 +276,16 @@ def sync_modbus_loop():
             if grp.get("type") != "HEATING":
                 continue
             code = _room_code(grp.get("label", ""))
+            if not code:
+                continue
             i = ROOM_CODE_MAP.get(code)
             if i is None:
-                continue
+                label = grp.get("label", "")
+                i = ROOM_COUNT
+                RAEUME.append(label)
+                ROOM_CODE_MAP[code] = i
+                ROOM_COUNT = i + 1
+                save_rooms()
             GID_BY_CODE[code] = gid
             addr = i * 4
             ist  = int(grp.get("valveActualTemperature", 0) * 10)
@@ -327,6 +371,33 @@ def api_modbus():
         "wetter": _gi(INPUT_GLOBAL + 2),
     })
 
+
+@app.route("/api/move-room/<int:idx>/<direction>", methods=["POST"])
+def api_move_room(idx, direction):
+    if direction == "up" and idx > 0:
+        RAEUME[idx], RAEUME[idx-1] = RAEUME[idx-1], RAEUME[idx]
+    elif direction == "down" and idx < ROOM_COUNT - 1:
+        RAEUME[idx], RAEUME[idx+1] = RAEUME[idx+1], RAEUME[idx]
+    else:
+        return jsonify({"ok": False}), 400
+    global ROOM_CODE_MAP
+    ROOM_CODE_MAP = {_room_code(r): i for i, r in enumerate(RAEUME)}
+    _sh(HOLDING_GLOBAL, ROOM_COUNT)
+    rewrite_rooms()
+    return jsonify({"ok": True})
+
+@app.route("/api/registers")
+def api_registers():
+    regs = []
+    for i in range(ROOM_COUNT):
+        a = i * 4
+        for off in range(4):
+            regs.append({"a": hex(a + off), "hr": _gh(a + off), "ir": _gi(a + off)})
+    for off in range(3):
+        regs.append({"a": hex(INPUT_GLOBAL + off), "hr": "-", "ir": _gi(INPUT_GLOBAL + off)})
+    for i in range(ROOM_COUNT):
+        regs.append({"a": hex(ROOM_ID_BASE + i), "hr": "-", "ir": _gi(ROOM_ID_BASE + i)})
+    return jsonify({"regs": regs})
 
 @app.route("/api/refresh")
 def api_refresh():

@@ -30,14 +30,6 @@ Gleiche Adressierung wie Holding.
 
 ## Room-ID (Input Register) – Raum-Erkennung für SPS
 
-Zur Verifikation: Die SPS liest `0x2000 + i` und erwartet Wert `i`.
-
-| Register | Beschreibung |
-|----------|-------------|
-| 0x2000 + n | Room-ID = Index `n` (0–32). Bestätigt Raumzuordnung. |
-
-Beispiel: SPS will Raum #7 lesen → liest IR 0x2007 → erwartet Wert `7`.
-
 ## Holding Global
 
 | Register | Beschreibung |
