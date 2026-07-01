@@ -1,4 +1,5 @@
 import asyncio, json, ssl, uuid, os, threading, urllib.request, urllib.error, time
+from collections import deque
 import websockets
 from flask import Flask, jsonify, render_template, request
 from pymodbus.server import StartTcpServer
@@ -115,6 +116,30 @@ def _si(a, v): MB[2].setValues(a + 1, [v])
 GID_BY_CODE = {}
 _INTERNAL_SET = False
 
+CMD_QUEUE = deque()
+CMD_LOCK = threading.Lock()
+
+def _enqueue_cmd(cmd_type, gid, val):
+    with CMD_LOCK:
+        CMD_QUEUE.append((cmd_type, gid, val))
+
+def _process_queue():
+    while True:
+        time.sleep(300)
+        item = None
+        with CMD_LOCK:
+            if CMD_QUEUE:
+                item = CMD_QUEUE.popleft()
+        if item:
+            try:
+                typ, gid, val = item
+                if typ == "temp":
+                    set_temp_sync(gid, val)
+                elif typ == "mode":
+                    set_mode_sync(gid, val)
+            except:
+                pass
+
 def _on_modbus_write(addr, val):
     global _INTERNAL_SET
     if _INTERNAL_SET:
@@ -127,13 +152,10 @@ def _on_modbus_write(addr, val):
     gid = GID_BY_CODE.get(code)
     if not gid:
         return
-    try:
-        if offset == 0:
-            set_temp_sync(gid, val / 10)
-        elif offset == 1:
-            set_mode_sync(gid, ["AUTOMATIC", "ECO", "MANUAL"][val] if 0 <= val <= 2 else "ECO")
-    except:
-        pass
+    if offset == 0:
+        _enqueue_cmd("temp", gid, val / 10)
+    elif offset == 1:
+        _enqueue_cmd("mode", gid, ["AUTOMATIC", "ECO", "MANUAL"][val] if 0 <= val <= 2 else "ECO")
 
 
 def rest_post(path, body):
@@ -424,8 +446,8 @@ def api_set_temp():
     gid, temp = body.get("group_id"), body.get("temperature")
     if not gid or temp is None:
         return jsonify({"ok": False, "error": "group_id und temperature"}), 400
-    ok, msg = set_temp_sync(gid, float(temp))
-    return jsonify({"ok": ok, "msg": msg})
+    _enqueue_cmd("temp", gid, float(temp))
+    return jsonify({"ok": True, "msg": "eingereiht"})
 
 
 @app.route("/api/set-mode", methods=["POST"])
@@ -434,8 +456,8 @@ def api_set_mode():
     gid, mode = body.get("group_id"), body.get("mode")
     if not gid or not mode:
         return jsonify({"ok": False, "error": "group_id und mode"}), 400
-    ok, msg = set_mode_sync(gid, mode)
-    return jsonify({"ok": ok, "msg": msg})
+    _enqueue_cmd("mode", gid, mode)
+    return jsonify({"ok": True, "msg": "eingereiht"})
 
 
 @app.route("/api/renew-token", methods=["POST"])
@@ -465,6 +487,7 @@ if __name__ == "__main__":
         print("  Bitte http://localhost:5000 aufrufen und Auth-Schluessel eingeben.")
 
     threading.Thread(target=sync_modbus_loop, daemon=True).start()
+    threading.Thread(target=_process_queue, daemon=True).start()
     print("  Dashboard: http://localhost:5000")
     print("  Modbus:    localhost:%d" % MODBUS_PORT)
     app.run(host="0.0.0.0", port=5000, debug=False)
