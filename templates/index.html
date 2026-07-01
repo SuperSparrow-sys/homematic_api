@@ -154,12 +154,14 @@ async function setTemp(id,v){await fetch('/api/set-temp',{method:'POST',headers:
 async function setMode(id,v){await fetch('/api/set-mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_id:id,mode:v})})}
 loadHCU();loadMB();loadRegs();loadJSON();
 async function loadJSON(){
+ if(_blocked){schedule(loadJSON,5000);return}
  try{
-  const r=await fetch('/api/data'); const d=await r.json();
-  document.getElementById('raw-status').innerHTML='<span class=ok>&#10003;</span> '+d.heating_count+' Gruppen, '+d.timestamp;
+  const r=await fetch('/api/raw'); const d=await r.json();
+  const gc=Object.keys(d.groups||{}).length,dc=Object.keys(d.devices||{}).length;
+  document.getElementById('raw-status').innerHTML='<span class=ok>&#10003;</span> '+gc+' Gruppen, '+dc+' Gerate, '+(d._last_update||'?');
   document.getElementById('raw-json').textContent=JSON.stringify(d,null,2);
  }catch(e){document.getElementById('raw-status').innerHTML='<span class=err>Fehler</span>'}
- setTimeout(loadJSON,5000);
+ schedule(loadJSON,5000);
 }
 </script>
 </body>

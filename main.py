@@ -429,6 +429,13 @@ def api_registers():
         regs.append({"a": hex(ROOM_ID_BASE + i), "hr": "-", "ir": _gi(ROOM_ID_BASE + i)})
     return jsonify({"regs": regs})
 
+@app.route("/api/raw")
+def api_raw():
+    with CACHE_LOCK:
+        if not CACHE:
+            return jsonify({"error": "Keine Daten"}), 503
+        return jsonify(dict(CACHE))
+
 @app.route("/api/refresh")
 def api_refresh():
     ok = update_cache()
