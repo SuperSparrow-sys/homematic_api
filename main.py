@@ -14,6 +14,7 @@ TOKEN_FILE  = os.path.join(os.path.dirname(__file__), "auth_token.json")
 MODBUS_PORT = 502
 
 app = Flask(__name__)
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 CACHE = {}
 CACHE_LOCK = threading.Lock()
 ssl_ctx = ssl.create_default_context()

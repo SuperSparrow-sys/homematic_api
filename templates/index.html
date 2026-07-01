@@ -85,6 +85,7 @@ function switchTab(t){
  document.getElementById('tab-'+t).classList.add('active');
 }
 async function loadHCU(){
+ if(_blocked){schedule(loadHCU,1000);return}
  try{
   const r=await fetch('/api/data'); const d=await r.json();
   const s=document.getElementById('hcu-status');
@@ -107,6 +108,7 @@ async function loadHCU(){
  schedule(loadHCU,3000);
 }
 async function loadMB(){
+ if(_blocked){schedule(loadMB,1000);return}
  try{
   const r=await fetch('/api/modbus'); const d=await r.json();
   document.getElementById('mb-status').innerHTML='<span class=ok>&#10003;</span> '+d.aussentemp_c.toFixed(1)+'°C '+d.feuchte.toFixed(0)+'%';
@@ -128,6 +130,7 @@ async function loadMB(){
  schedule(loadMB,3000);
 }
 async function loadRegs(){
+ if(_blocked){schedule(loadRegs,1000);return}
  try{
   const r=await fetch('/api/registers'); const d=await r.json();
   document.getElementById('reg-status').innerHTML='<span class=ok>&#10003;</span> '+d.regs.length+' Register';
