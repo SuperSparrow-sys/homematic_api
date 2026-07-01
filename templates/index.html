@@ -74,6 +74,10 @@ code{font-family:'Cascadia Code','Fira Code','Consolas',monospace}
 <pre><code id="raw-json"></code></pre>
 </div>
 <script>
+var _blocked=false;
+document.addEventListener('focusin',function(e){if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')_blocked=true});
+document.addEventListener('focusout',function(e){if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')_blocked=false});
+function schedule(fn,ms){if(!_blocked)setTimeout(fn,ms);else setTimeout(function(){schedule(fn,ms)},1000)}
 function switchTab(t){
  document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
@@ -100,7 +104,7 @@ async function loadHCU(){
     +'<select onchange="setMode(\''+r.id+'\',this.value)"><option'+(r.modus==='AUTOMATIC'?' selected':'')+'>AUTOMATIC</option><option'+(r.modus==='ECO'?' selected':'')+'>ECO</option><option'+(r.modus==='MANUAL'?' selected':'')+'>MANUAL</option></select></td></tr>'
   ).join('');
  }catch(e){document.getElementById('hcu-status').innerHTML='<span class=err>Fehler</span>'}
- setTimeout(loadHCU,3000);
+ schedule(loadHCU,3000);
 }
 async function loadMB(){
  try{
@@ -121,7 +125,7 @@ async function loadMB(){
    +'<td>'+r.fehler+'</td></tr>'
   ).join('');
  }catch(e){document.getElementById('mb-status').innerHTML='<span class=err>Fehler</span>'}
- setTimeout(loadMB,3000);
+ schedule(loadMB,3000);
 }
 async function loadRegs(){
  try{
@@ -139,7 +143,7 @@ async function loadRegs(){
    return '<tr><td>'+a+'</td><td class=l>'+label+'</td><td>'+(r.hr==='-'?'-':r.hr)+'</td><td>'+(r.ir)+'</td></tr>'
   }).join('');
  }catch(e){document.getElementById('reg-status').innerHTML='<span class=err>Fehler</span>'}
- setTimeout(loadRegs,5000);
+ schedule(loadRegs,5000);
 }
 async function refresh(){await fetch('/api/refresh');loadHCU();loadMB();loadRegs();loadJSON()}
 async function moveRoom(i,d){await fetch('/api/move-room/'+i+'/'+d,{method:'POST'});loadMB();loadRegs()}
