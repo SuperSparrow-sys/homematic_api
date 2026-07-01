@@ -5,7 +5,7 @@ from pymodbus.server import StartTcpServer
 from pymodbus.datastore import ModbusSlaveContext, ModbusServerContext
 from pymodbus.datastore.store import ModbusSparseDataBlock
 
-HCU_IP = "192.168.0.90"
+HCU_IP = "172.168.1.124"
 HCU_HOST = f"https://{HCU_IP}:6969"
 HCU_WS  = f"wss://{HCU_IP}:9001"
 PLUGIN_ID   = "de.local.hcu-bridge"
