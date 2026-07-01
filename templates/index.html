@@ -85,10 +85,10 @@ async function loadHCU(){
   const w=d.weather||{};
   s.innerHTML='<span class=ok>&#10003;</span> Wetter: '+(w.temperature||'?')+'°C '+((w.humidity||'?')+'%').padStart(2);
   document.getElementById('hcu-tbody').innerHTML=d.heating.map(r=>
-   '<tr><td class=l>'+r.raum+'</td>'
-   +'<td>'+r.soll_temp.toFixed(1)+'</td><td>'+r.ist_temp.toFixed(1)+'</td>'
-   +'<td class='+r.modus.toLowerCase()+'>'+r.modus+'</td>'
-   +'<td>'+(r.ventil*100).toFixed(0)+'%</td>'
+   '<tr><td class=l>'+(r.raum||'?')+'</td>'
+   +'<td>'+(r.soll_temp!=null?r.soll_temp.toFixed(1):'-')+'</td><td>'+(r.ist_temp!=null?r.ist_temp.toFixed(1):'-')+'</td>'
+   +'<td class='+(r.modus||'?').toLowerCase()+'>'+(r.modus||'?')+'</td>'
+   +'<td>'+((r.ventil||0)*100).toFixed(0)+'%</td>'
     +'<td>'+(r.boost?'<span class="badge bo">BOOST</span>':'')+'</td>'
     +'<td>'+(r.party?'<span class="badge pa">PARTY</span>':'')+'</td>'
     +'<td'+(r.fenster==='OPEN'?' style=color:#dc2626':'')+'>'+(r.fenster==='OPEN'?'OFFEN':r.fenster||'-')+'</td>'
