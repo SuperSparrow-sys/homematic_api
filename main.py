@@ -288,8 +288,8 @@ def sync_modbus_loop():
                 save_rooms()
             GID_BY_CODE[code] = gid
             addr = i * 4
-            ist  = int(grp.get("valveActualTemperature", 0) * 10)
-            vent = int(grp.get("valvePosition", 0) * 1000)
+            ist  = int((grp.get("valveActualTemperature") or 0) * 10)
+            vent = int((grp.get("valvePosition") or 0) * 1000)
             win  = {"OPEN": 1, "CLOSED": 0}.get(grp.get("windowState"), 65535)
             err  = (1 if grp.get("unreach") else 0) | (2 if grp.get("lowBat") else 0) | (4 if grp.get("heatingFailure") else 0)
             _si(addr, ist)
@@ -297,7 +297,7 @@ def sync_modbus_loop():
             _si(addr + 2, win)
             _si(addr + 3, err)
             # HR vom HCU-Cache spiegeln (SPS kann lesen)
-            soll = int(grp.get("setPointTemperature", 15) * 10)
+            soll = int((grp.get("setPointTemperature") or 15) * 10)
             mode = {"AUTOMATIC": 0, "ECO": 1, "MANUAL": 2}.get(grp.get("controlMode"), 1)
             boost = 1 if grp.get("boostMode") else 0
             party = 1 if grp.get("partyMode") else 0
