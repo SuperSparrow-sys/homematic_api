@@ -257,56 +257,63 @@ def update_cache():
     return False
 
 
+def sync_modbus_once(groups, weather):
+    global _INTERNAL_SET, ROOM_COUNT, ROOM_CODE_MAP
+    if not groups:
+        return
+    for i in range(ROOM_COUNT):
+        _si(ROOM_ID_BASE + i, i)
+    _sh(HOLDING_GLOBAL, ROOM_COUNT)
+    if weather:
+        _si(INPUT_GLOBAL, int(weather.get("temperature", 0) * 10))
+        _si(INPUT_GLOBAL + 1, int(weather.get("humidity", 0)))
+    for gid, grp in groups.items():
+        if grp.get("type") != "HEATING":
+            continue
+        code = _room_code((grp.get("label") or "").strip())
+        if not code:
+            continue
+        i = ROOM_CODE_MAP.get(code)
+        if i is None:
+            label = (grp.get("label") or "").strip()
+            i = ROOM_COUNT
+            RAEUME.append(label)
+            ROOM_CODE_MAP[code] = i
+            ROOM_COUNT = i + 1
+            save_rooms()
+        GID_BY_CODE[code] = gid
+        addr = i * 4
+        ist  = int((grp.get("valveActualTemperature") or 0) * 10)
+        vent = int((grp.get("valvePosition") or 0) * 1000)
+        win  = {"OPEN": 1, "CLOSED": 0}.get(grp.get("windowState"), 65535)
+        err  = (1 if grp.get("unreach") else 0) | (2 if grp.get("lowBat") else 0) | (4 if grp.get("heatingFailure") else 0)
+        _si(addr, ist)
+        _si(addr + 1, vent)
+        _si(addr + 2, win)
+        _si(addr + 3, err)
+        soll = int((grp.get("setPointTemperature") or 15) * 10)
+        mode = {"AUTOMATIC": 0, "ECO": 1, "MANUAL": 2}.get(grp.get("controlMode"), 1)
+        boost = 1 if grp.get("boostMode") else 0
+        party = 1 if grp.get("partyMode") else 0
+        _INTERNAL_SET = True
+        _sh(addr, soll)
+        _sh(addr + 1, mode)
+        _sh(addr + 2, boost)
+        _sh(addr + 3, party)
+        _INTERNAL_SET = False
+
 def sync_modbus_loop():
     global _INTERNAL_SET, ROOM_COUNT, ROOM_CODE_MAP
+    tick = 0
     while True:
         time.sleep(2)
+        tick += 1
+        if tick % 15 == 0:
+            update_cache()
         with CACHE_LOCK:
             groups = dict(CACHE.get("groups", {}))
             weather = CACHE.get("home", {}).get("weather", {})
-        if not groups:
-            continue
-        for i in range(ROOM_COUNT):
-            _si(ROOM_ID_BASE + i, i)
-        _sh(HOLDING_GLOBAL, ROOM_COUNT)
-        if weather:
-            _si(INPUT_GLOBAL, int(weather.get("temperature", 0) * 10))
-            _si(INPUT_GLOBAL + 1, int(weather.get("humidity", 0)))
-        for gid, grp in groups.items():
-            if grp.get("type") != "HEATING":
-                continue
-            code = _room_code((grp.get("label") or "").strip())
-            if not code:
-                continue
-            i = ROOM_CODE_MAP.get(code)
-            if i is None:
-                label = (grp.get("label") or "").strip()
-                i = ROOM_COUNT
-                RAEUME.append(label)
-                ROOM_CODE_MAP[code] = i
-                ROOM_COUNT = i + 1
-                save_rooms()
-            GID_BY_CODE[code] = gid
-            addr = i * 4
-            ist  = int((grp.get("valveActualTemperature") or 0) * 10)
-            vent = int((grp.get("valvePosition") or 0) * 1000)
-            win  = {"OPEN": 1, "CLOSED": 0}.get(grp.get("windowState"), 65535)
-            err  = (1 if grp.get("unreach") else 0) | (2 if grp.get("lowBat") else 0) | (4 if grp.get("heatingFailure") else 0)
-            _si(addr, ist)
-            _si(addr + 1, vent)
-            _si(addr + 2, win)
-            _si(addr + 3, err)
-            # HR vom HCU-Cache spiegeln (SPS kann lesen)
-            soll = int((grp.get("setPointTemperature") or 15) * 10)
-            mode = {"AUTOMATIC": 0, "ECO": 1, "MANUAL": 2}.get(grp.get("controlMode"), 1)
-            boost = 1 if grp.get("boostMode") else 0
-            party = 1 if grp.get("partyMode") else 0
-            _INTERNAL_SET = True
-            _sh(addr, soll)
-            _sh(addr + 1, mode)
-            _sh(addr + 2, boost)
-            _sh(addr + 3, party)
-            _INTERNAL_SET = False
+        sync_modbus_once(groups, weather)
 
 
 @app.route("/")
@@ -401,7 +408,13 @@ def api_registers():
 
 @app.route("/api/refresh")
 def api_refresh():
-    return jsonify({"ok": update_cache()})
+    ok = update_cache()
+    if ok:
+        with CACHE_LOCK:
+            groups = dict(CACHE.get("groups", {}))
+            weather = CACHE.get("home", {}).get("weather", {})
+        sync_modbus_once(groups, weather)
+    return jsonify({"ok": ok})
 
 
 @app.route("/api/set-temp", methods=["POST"])
