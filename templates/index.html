@@ -73,7 +73,7 @@ code{font-family:'Cascadia Code','Fira Code','Consolas',monospace}
  <div class="status" id="raw-status">Lade...</div>
  <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
   <input id="raw-search" type="text" placeholder="Suchen..." oninput="renderRaw()" style="flex:1;padding:4px 8px;font-size:.75rem;border:1px solid #ccc;border-radius:4px">
-  <button id="raw-toggle" data-mode="full" onclick="toggleRawMode()" style="padding:4px 10px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer;font-size:.75rem">Kompakt</button>
+  <button id="raw-toggle" data-mode="compact" onclick="toggleRawMode()" style="padding:4px 10px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer;font-size:.75rem">Erweitert</button>
  </div>
  <div id="raw-compact" style="display:none"></div>
  <pre><code id="raw-json"></code></pre>
@@ -161,8 +161,8 @@ loadHCU();loadMB();loadRegs();loadJSON();
 var _rawData=null;
 function toggleRawMode(){
  const btn=document.getElementById('raw-toggle');
- btn.dataset.mode=btn.dataset.mode==='full'?'compact':'full';
- btn.textContent=btn.dataset.mode==='compact'?'Voll':'Kompakt';
+ if(btn.dataset.mode==='compact'){btn.dataset.mode='full';btn.textContent='Kompakt'}
+ else{btn.dataset.mode='compact';btn.textContent='Erweitert'}
  renderRaw();
 }
 async function loadJSON(){
@@ -185,9 +185,34 @@ function renderRaw(){
   cd.style.display='block';jp.parentElement.style.display='none';
   let h='<div style="font-size:.75rem;background:#fff;border-radius:8px;padding:12px;box-shadow:0 1px 3px rgba(0,0,0,.1)">';
   const w=d.home&&d.home.weather;
-  if(w)h+='<div style="padding:4px 0"><strong>Wetter</strong>: '+(w.temperature||'?')+'C, '+(w.humidity||'?')+'% rel., Code '+(w.weatherCode||'?')+'</div>';
+  if(w)h+='<div style="padding:4px 0"><strong>Wetter</strong>: '+(w.temperature!=null?w.temperature+'C':'?')+', '+(w.humidity!=null?w.humidity+'%':'?')+', Code '+(w.weatherCode||'?')+'</div>';
+  for(const[devId,dev]of Object.entries(d.devices||{})){
+   const fcs=dev.functionalChannels||{};
+   for(const ch of Object.values(fcs)){
+    if(ch.dutyCycle!=null){
+     h+='<div style="padding:2px 0"><strong>dutyCycle</strong>: '+ch.dutyCycle+'% (Level: '+(ch.dutyCycleLevel!=null?ch.dutyCycleLevel:'?')+')</div>';
+    }
+   }
+  }
+  const devs=d.devices||{};
+  h+='<div style="margin-top:6px;padding:4px 0;font-weight:600">Geraete ('+Object.keys(devs).length+')</div>';
+  for(const[devId,dev]of Object.entries(devs)){
+   if(q&&!devId.toLowerCase().includes(q)&&!(dev.type||'').toLowerCase().includes(q))continue;
+   h+='<div style="padding:2px 0 2px 8px;border-bottom:1px solid #eee">';
+   h+='<strong>'+devId+'</strong>';
+   if(dev.type)h+=' <span style="color:#666">'+dev.type+'</span>';
+   if(dev.firmwareVersion)h+=' <span style="font-size:.65rem;color:#999">FW:'+dev.firmwareVersion+'</span>';
+   const fcs2=dev.functionalChannels||{};
+   for(const ch of Object.values(fcs2)){
+    if(ch.dutyCycle!=null)h+=' <span style="color:#2563eb">dutyCycle='+ch.dutyCycle+'%</span>';
+   }
+   h+='</div>';
+  }
+  const groups=d.groups||{};const types={};
+  for(const g of Object.values(groups)){const t=g.type||'UNK';types[t]=(types[t]||0)+1;}
+  if(Object.keys(types).length)h+='<div style="margin-top:6px"><strong>Gruppen-Typen</strong>: '+Object.entries(types).map(([k,v])=>k+': '+v).join(', ')+'</div>';
   for(const[key,val]of Object.entries(d)){
-   if(key==='_last_update')continue;
+   if(key==='_last_update'||key==='devices'||key==='groups'||key==='home')continue;
    const t=typeof val;let inf='';
    if(val===null)inf='null';
    else if(Array.isArray(val))inf='['+val.length+' Eintraege]';
@@ -196,12 +221,6 @@ function renderRaw(){
    else inf=String(val);
    if(!q||key.toLowerCase().includes(q)||inf.toLowerCase().includes(q))h+='<div style="padding:2px 0"><strong>'+key+'</strong>: '+inf+'</div>';
   }
-  const groups=d.groups||{};const types={};
-  for(const g of Object.values(groups)){const t=g.type||'UNK';types[t]=(types[t]||0)+1;}
-  const devices=d.devices||{};const devTypes={};
-  for(const dev of Object.values(devices)){const t=dev.type||'UNK';devTypes[t]=(devTypes[t]||0)+1;}
-  if(Object.keys(types).length)h+='<div style="margin-top:8px"><strong>Gruppen-Typen</strong>: '+Object.entries(types).map(([k,v])=>k+': '+v).join(', ')+'</div>';
-  if(Object.keys(devTypes).length)h+='<div><strong>Geraete-Typen</strong>: '+Object.entries(devTypes).map(([k,v])=>k+': '+v).join(', ')+'</div>';
   h+='</div>';cd.innerHTML=h;
  }else{
   cd.style.display='none';jp.parentElement.style.display='block';
