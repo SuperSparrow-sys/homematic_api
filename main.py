@@ -275,12 +275,12 @@ def sync_modbus_loop():
         for gid, grp in groups.items():
             if grp.get("type") != "HEATING":
                 continue
-            code = _room_code(grp.get("label", ""))
+            code = _room_code((grp.get("label") or "").strip())
             if not code:
                 continue
             i = ROOM_CODE_MAP.get(code)
             if i is None:
-                label = grp.get("label", "")
+                label = (grp.get("label") or "").strip()
                 i = ROOM_COUNT
                 RAEUME.append(label)
                 ROOM_CODE_MAP[code] = i

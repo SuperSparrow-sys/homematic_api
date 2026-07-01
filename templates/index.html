@@ -145,7 +145,7 @@ loadHCU();loadMB();loadRegs();loadJSON();
 async function loadJSON(){
  try{
   const r=await fetch('/api/data'); const d=await r.json();
-  document.getElementById('raw-status').innerHTML='<span class=ok>&#10003;</span> '+d.heating_count+' Gruppen, '+d.device_count+' Gerate, '+d.timestamp;
+  document.getElementById('raw-status').innerHTML='<span class=ok>&#10003;</span> '+d.heating_count+' Gruppen, '+d.timestamp;
   document.getElementById('raw-json').textContent=JSON.stringify(d,null,2);
  }catch(e){document.getElementById('raw-status').innerHTML='<span class=err>Fehler</span>'}
  setTimeout(loadJSON,5000);
