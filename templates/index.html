@@ -170,9 +170,9 @@ function renderRaw(){
  const gc=Object.keys(d.groups||{}).length,dc=Object.keys(d.devices||{}).length;
  let extra='';
  if(d.dutyCycle!=null)extra+='dutyCycle: '+d.dutyCycle;
- for(const dev of Object.values(d.devices||{})){
+ for(const[id,dev]of Object.entries(d.devices||{})){
   for(const ch of Object.values(dev.functionalChannels||{})){
-   if(ch.dutyCycleLevel!=null&&ch.dutyCycleLevel!==false)extra+=(extra?', ':'')+'dutyLevel: '+ch.dutyCycleLevel+'%';
+   if(ch.dutyCycleLevel!=null&&ch.dutyCycleLevel!==false)extra+=(extra?', ':'')+id+': '+ch.dutyCycleLevel+'%';
   }
  }
  document.getElementById('raw-status').innerHTML='<span class=ok>&#10003;</span> '+gc+' Gruppen, '+dc+' Gerate'+(extra?', '+extra:'')+', '+(d._last_update||'?');
