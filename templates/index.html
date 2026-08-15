@@ -54,9 +54,11 @@ header{
 .btn{
   font-family:var(--sans);font-size:.78rem;font-weight:600;color:var(--text);
   padding:7px 14px;border:1px solid var(--border-strong);background:var(--surface);cursor:pointer;
-  border-radius:6px;
+  border-radius:6px;min-width:112px;text-align:center;
 }
 .btn:hover{background:var(--surface-2)}
+.btn.ok{color:var(--ok);border-color:var(--ok)}
+.btn.err{color:var(--err);border-color:var(--err)}
 
 .panel{display:none}
 .panel.active{display:block}
@@ -158,7 +160,7 @@ pre{
       <button onclick="switchTab('regs')">Register</button>
       <button onclick="switchTab('raw')">Raw JSON</button>
     </div>
-    <button class="btn" onclick="refresh()">&#x21bb; Neu laden</button>
+    <button class="btn" id="refresh-btn" onclick="refresh()">&#x21bb; Neu laden</button>
   </div>
 </header>
 
@@ -309,7 +311,24 @@ async function loadRegs(){
  }catch(e){document.getElementById('reg-status').innerHTML='<span class="dot err"></span><span class="err-text">Fehler</span>'}
  schedule(loadRegs,5000);
 }
-async function refresh(){await fetch('/api/refresh');loadHCU();loadMB();loadRegs();loadJSON()}
+var _refreshTimer=null;
+async function refresh(){
+ const btn=document.getElementById('refresh-btn');
+ if(_refreshTimer)clearTimeout(_refreshTimer);
+ btn.classList.remove('ok','err');
+ let ok=false;
+ try{
+  const r=await fetch('/api/refresh'); const d=await r.json();
+  ok=!!d.ok;
+ }catch(e){ok=false}
+ loadHCU();loadMB();loadRegs();loadJSON();
+ btn.textContent=ok?'✓ Aktualisiert':'✕ Fehlgeschlagen';
+ btn.classList.add(ok?'ok':'err');
+ _refreshTimer=setTimeout(function(){
+  btn.textContent='↻ Neu laden';
+  btn.classList.remove('ok','err');
+ },2000);
+}
 async function moveRoom(i,d){await fetch('/api/move-room/'+i+'/'+d,{method:'POST'});loadMB();loadRegs()}
 async function setTemp(id,v){await fetch('/api/set-temp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_id:id,temperature:parseFloat(v)})})}
 async function setMode(id,v){await fetch('/api/set-mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_id:id,mode:v})})}

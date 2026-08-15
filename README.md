@@ -4,7 +4,9 @@ Echtzeit-Brücke zwischen einer **Homematic IP Central (HCU)** und einer **SPS p
 
 - HCU-Daten (Isttemp, Solltemp, Ventil, Modus, Fenster, Fehler) → Modbus Input Register
 - SPS schreibt Solltemp/Modus → Modbus Holding Register → Callback → HCU per WebSocket
-- Dashboard unter http://localhost:5000 (HCU / Modbus / Raw JSON)
+- Dashboard unter http://localhost:5000 (HCU / Modbus / Register / Raw JSON) –
+  der „Neu laden“-Button zeigt Erfolg/Fehler direkt am Button an (grüner Haken
+  bzw. rotes Kreuz, verschwindet nach 2 Sekunden wieder)
 
 ## Hardware
 
@@ -173,7 +175,7 @@ read_input_registers(0x2000 + i, 1) → muss die dokumentierte Prüfsumme für R
 | `rooms.txt` | Persistierte Raumliste – **Quelle der Modbus-Index-Reihenfolge** |
 | `auth_token.json` | Persistierter HCU-Auth-Token (wird nur bei manueller Erneuerung geschrieben, **nicht committen**) |
 | `hcu_ca.pem` | Optional: gepinntes HCU-Zertifikat für TLS-Verifikation (**nicht committen**) |
-| `templates/index.html` | Dashboard (HCU / Modbus / Raw JSON) |
+| `templates/index.html` | Dashboard (HCU / Modbus / Register / Raw JSON) |
 | `modbus_scan.py` | Diagnose: scannt alle Register, testet Schreibbarkeit, prüft Room-IDs |
 | `REGISTERMAP.md` | Vollständige Register-Dokumentation |
 | `requirements.txt` | Python-Abhängigkeiten für `pip install -r requirements.txt` |
@@ -186,7 +188,9 @@ python modbus_scan.py 192.168.1.10 502   # Remote
 ```
 
 Der Scanner listet alle Räume mit HR/IR-Werten und zeigt die Room-ID an.
-Weicht die Room-ID vom Index ab, wird `!<wert>` ausgegeben.
+Weicht die gelesene Prüfsumme von der für diesen Raum erwarteten ab, wird
+`!<wert> (erwartet <erwartet>)` ausgegeben – ein Zeichen dafür, dass sich die
+Raumreihenfolge gegenüber der SPS-Konfiguration verschoben hat.
 
 ## SPS-Seite (Siemens S7-1200/1500)
 
