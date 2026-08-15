@@ -1,10 +1,18 @@
-import asyncio, json, ssl, uuid, os, threading, urllib.request, urllib.error, time
+import asyncio, json, logging, ssl, uuid, os, threading, urllib.request, urllib.error, time
 from collections import deque
+from datetime import datetime, timedelta
 import websockets
 from flask import Flask, jsonify, render_template, request
 from pymodbus.server import StartTcpServer
 from pymodbus.datastore import ModbusSlaveContext, ModbusServerContext
 from pymodbus.datastore.store import ModbusSparseDataBlock
+
+from registers import (
+    MODBUS_PORT, ROOM_STRIDE, MAX_ROOMS,
+    OFF_SOLL, OFF_MODUS, OFF_BOOST, OFF_PARTY,
+    OFF_IST, OFF_VENTIL, OFF_FENSTER, OFF_FEHLER,
+    MODE_NAMES, HOLDING_GLOBAL, INPUT_GLOBAL, ROOM_ID_BASE,
+)
 
 HCU_IP = "172.168.1.124"
 HCU_HOST = f"https://{HCU_IP}:6969"
@@ -12,20 +20,46 @@ HCU_WS  = f"wss://{HCU_IP}:9001"
 PLUGIN_ID   = "de.local.hcu-bridge"
 PLUGIN_NAME = {"de": "HCU Bridge"}
 TOKEN_FILE  = os.path.join(os.path.dirname(__file__), "auth_token.json")
-MODBUS_PORT = 502
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger("hcu_bridge")
+
+def log_exc(context):
+    """Loggt die aktuelle Exception mit Kontext, statt sie stillschweigend zu
+    verschlucken (siehe Analyse-Report Punkt 2.5). An allen Stellen verwenden,
+    die bisher mit nacktem except: pass/except: Fehler ignoriert haben."""
+    logger.exception("Fehler in %s", context)
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 CACHE = {}
 CACHE_LOCK = threading.Lock()
-ssl_ctx = ssl.create_default_context()
-ssl_ctx.check_hostname = False
-ssl_ctx.verify_mode = ssl.CERT_NONE
 
-ROOMS_FILE   = os.path.join(os.path.dirname(__file__), "rooms.txt")
-HOLDING_GLOBAL = 0x1000
-INPUT_GLOBAL   = 0x1000
-ROOM_ID_BASE   = 0x2000
+# TLS: Standardmaessig wird die Verbindung zur HCU NICHT verifiziert, da die
+# HCU ein selbstsigniertes Zertifikat verwendet (kein Hostname-Match moeglich).
+# Um Man-in-the-Middle-Angriffe im lokalen Netz zu verhindern, kann das
+# HCU-Zertifikat gepinnt werden: Zertifikat der HCU als PEM exportieren
+# (z.B. via `openssl s_client -connect <HCU_IP>:6969 -showcerts`) und als
+# hcu_ca.pem neben main.py ablegen. Ist die Datei vorhanden, wird ausschliesslich
+# gegen dieses Zertifikat verifiziert; ohne Datei bleibt die bisherige,
+# unverifizierte Verbindung als Fallback erhalten (mit Warnung beim Start).
+HCU_CA_CERT = os.environ.get("HCU_CA_CERT", os.path.join(os.path.dirname(__file__), "hcu_ca.pem"))
+ssl_ctx = ssl.create_default_context()
+if os.path.exists(HCU_CA_CERT):
+    ssl_ctx.load_verify_locations(HCU_CA_CERT)
+    ssl_ctx.check_hostname = False  # HCU-Zertifikat ist i.d.R. nicht auf die IP ausgestellt
+    ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+else:
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = ssl.CERT_NONE
+    logger.warning(
+        "Kein gepinntes HCU-Zertifikat gefunden (%s) - TLS-Verifikation ist "
+        "deaktiviert, Verbindung zur HCU ist gegen MITM im lokalen Netz nicht "
+        "geschuetzt. Siehe README.md, Abschnitt TLS.", HCU_CA_CERT,
+    )
+
+ROOMS_FILE = os.path.join(os.path.dirname(__file__), "rooms.txt")
+ROOMS_LOCK = threading.RLock()
 
 _DEFAULT_ROOMS = [
     "A001 (Werkstatt)","A101 (Schleiferei)","A102 (QS)","A103 (Server)",
@@ -47,6 +81,8 @@ def _room_code(label):
     return label.split(" ")[0] if label else ""
 
 def load_rooms():
+    """Laedt rooms.txt in RAEUME/ROOM_COUNT/ROOM_CODE_MAP. Nur beim Start
+    aufgerufen (vor Thread-Start), daher ohne ROOMS_LOCK unkritisch."""
     global RAEUME, ROOM_COUNT, ROOM_CODE_MAP
     if os.path.exists(ROOMS_FILE):
         with open(ROOMS_FILE, encoding="utf-8") as f:
@@ -57,21 +93,19 @@ def load_rooms():
             f.write("\n".join(RAEUME) + "\n")
     ROOM_COUNT = len(RAEUME)
     ROOM_CODE_MAP = {_room_code(r): i for i, r in enumerate(RAEUME)}
+    if ROOM_COUNT > MAX_ROOMS:
+        logger.warning(
+            "rooms.txt enthaelt %d Raeume, aber nur %d Modbus-Slots sind "
+            "vorallokiert (MAX_ROOMS in registers.py). Raeume ab Index %d "
+            "sind fuer die SPS nicht erreichbar.", ROOM_COUNT, MAX_ROOMS, MAX_ROOMS,
+        )
 
-def save_rooms():
-    if not os.path.exists(ROOMS_FILE):
-        with open(ROOMS_FILE, "w", encoding="utf-8") as f:
-            f.write("\n".join(RAEUME) + "\n")
-        return
-    with open(ROOMS_FILE, "r", encoding="utf-8") as f:
-        existing = [line.strip() for line in f if line.strip()]
-    existing_set = set(existing)
-    new_entries = [r for r in RAEUME if r not in existing_set]
-    if new_entries:
-        with open(ROOMS_FILE, "a", encoding="utf-8") as f:
-            f.write("\n".join(new_entries) + "\n")
-
-def rewrite_rooms():
+def persist_rooms():
+    """Schreibt RAEUME vollstaendig nach rooms.txt. Einzige Schreibfunktion
+    fuer diese Datei (ersetzt die vormals doppelte save_rooms()/rewrite_rooms()
+    Logik aus Analyse-Report Punkt 2.7), damit rooms.txt nicht durch zwei
+    unterschiedliche Schreibpfade auseinanderlaufen kann. Aufrufer muss
+    ROOMS_LOCK bereits halten."""
     with open(ROOMS_FILE, "w", encoding="utf-8") as f:
         f.write("\n".join(RAEUME) + "\n")
 
@@ -80,9 +114,14 @@ load_rooms()
 
 class HoldingBlock(ModbusSparseDataBlock):
     def __init__(self):
+        # Vorallokierung fuer MAX_ROOMS Slots statt nur ROOM_COUNT: pymodbus'
+        # ModbusSparseDataBlock beantwortet nur Adressen, die hier beim Anlegen
+        # registriert werden - kommt zur Laufzeit ein neuer Raum hinzu (>
+        # ROOM_COUNT beim Start), waeren dessen Register sonst fuer die SPS
+        # nicht erreichbar (siehe Analyse-Report Punkt 2.3).
         d = {}
-        for i in range(ROOM_COUNT):
-            a = i * 4
+        for i in range(MAX_ROOMS):
+            a = i * ROOM_STRIDE
             d[a + 1] = 0; d[a + 2] = 0; d[a + 3] = 0; d[a + 4] = 0
         d[HOLDING_GLOBAL + 1] = ROOM_COUNT
         super().__init__(d)
@@ -96,21 +135,24 @@ class HoldingBlock(ModbusSparseDataBlock):
 class InputBlock(ModbusSparseDataBlock):
     def __init__(self):
         d = {}
-        for i in range(ROOM_COUNT):
-            a = i * 4
+        for i in range(MAX_ROOMS):
+            a = i * ROOM_STRIDE
             d[a + 1] = 0; d[a + 2] = 0; d[a + 3] = 65535; d[a + 4] = 0
         d[INPUT_GLOBAL + 1] = 0; d[INPUT_GLOBAL + 2] = 0; d[INPUT_GLOBAL + 3] = 0
-        for i in range(ROOM_COUNT):
+        for i in range(MAX_ROOMS):
             d[ROOM_ID_BASE + i + 1] = 65535
         super().__init__(d)
 
 
 MB = None
 
-def _gh(a): return MB[1].getValues(a + 1, 1)[0]
-def _gi(a): return MB[2].getValues(a + 1, 1)[0]
-def _sh(a, v): MB[1].setValues(a + 1, [v])
-def _si(a, v): MB[2].setValues(a + 1, [v])
+# Die Modbus-Register hier sind 1-basiert adressiert (pymodbus-Konvention der
+# genutzten Version), waehrend Raum-/Offset-Rechnungen im restlichen Code
+# 0-basiert sind - daher das +1 in jedem Zugriff.
+def read_holding(addr): return MB[1].getValues(addr + 1, 1)[0]
+def read_input(addr):   return MB[2].getValues(addr + 1, 1)[0]
+def write_holding(addr, val): MB[1].setValues(addr + 1, [val])
+def write_input(addr, val):   MB[2].setValues(addr + 1, [val])
 
 
 GID_BY_CODE = {}
@@ -124,6 +166,9 @@ def _enqueue_cmd(cmd_type, gid, val):
         CMD_QUEUE.append((cmd_type, gid, val))
 
 def _process_queue():
+    # Intervall/Batching hier bewusst unveraendert gelassen (siehe Report 2.1) -
+    # nur Fehlerbehandlung ergaenzt, damit fehlgeschlagene HCU-Befehle nicht
+    # mehr stillschweigend verschwinden.
     while True:
         time.sleep(300)
         item = None
@@ -131,31 +176,40 @@ def _process_queue():
             if CMD_QUEUE:
                 item = CMD_QUEUE.popleft()
         if item:
+            typ, gid, val = item
             try:
-                typ, gid, val = item
                 if typ == "temp":
                     set_temp_sync(gid, val)
                 elif typ == "mode":
                     set_mode_sync(gid, val)
-            except:
-                pass
+                elif typ == "boost":
+                    set_boost_sync(gid, val)
+                elif typ == "party":
+                    set_party_sync(gid, val)
+            except Exception:
+                log_exc(f"_process_queue({typ}, {gid})")
 
 def _on_modbus_write(addr, val):
     global _INTERNAL_SET
     if _INTERNAL_SET:
         return
-    room = (addr - 1) // 4
-    offset = (addr - 1) % 4
-    if room < 0 or room >= ROOM_COUNT:
-        return
-    code = _room_code(RAEUME[room])
-    gid = GID_BY_CODE.get(code)
+    room = (addr - 1) // ROOM_STRIDE
+    offset = (addr - 1) % ROOM_STRIDE
+    with ROOMS_LOCK:
+        if room < 0 or room >= ROOM_COUNT:
+            return
+        code = _room_code(RAEUME[room])
+        gid = GID_BY_CODE.get(code)
     if not gid:
         return
-    if offset == 0:
+    if offset == OFF_SOLL:
         _enqueue_cmd("temp", gid, val / 10)
-    elif offset == 1:
-        _enqueue_cmd("mode", gid, ["AUTOMATIC", "ECO", "MANUAL"][val] if 0 <= val <= 2 else "ECO")
+    elif offset == OFF_MODUS:
+        _enqueue_cmd("mode", gid, MODE_NAMES[val] if 0 <= val <= 2 else "ECO")
+    elif offset == OFF_BOOST:
+        _enqueue_cmd("boost", gid, bool(val))
+    elif offset == OFF_PARTY:
+        _enqueue_cmd("party", gid, bool(val))
 
 
 def rest_post(path, body):
@@ -240,6 +294,42 @@ def set_mode_sync(group_id, mode):
         {"groupId": group_id, "controlMode": mode}))
 
 
+# Boost/Party werden laut REGISTERMAP.md ueber HR+2/HR+3 von der SPS
+# schreibbar dokumentiert, wurden bisher aber nirgends an die HCU
+# weitergegeben (siehe Analyse-Report Punkt 2.6). HINWEIS: Die HCU-Endpunkte
+# hier folgen dem allgemein bekannten HomematicIP-Cloud-API-Muster (analog zu
+# setSetPointTemperature/setControlMode oben), sind aber - anders als die
+# bereits produktiv genutzten Aufrufe - NICHT gegen eine echte HCU getestet.
+# Vor produktivem Einsatz unbedingt einmal kontrolliert testen (z.B. Boost per
+# Modbus-Testschreibzugriff ausloesen und in der Homematic-App gegenpruefen).
+PARTY_MODE_DURATION_MINUTES = 120  # SPS liefert nur 0/1 ueber Modbus, keine Zeitangabe -> feste Default-Dauer
+
+def set_boost_sync(group_id, activate):
+    auth_token, _ = load_token()
+    if not auth_token: return False, "Kein Auth-Token"
+    if activate:
+        return asyncio.run(_send_ws_command(auth_token, "/hmip/group/heating/setBoost",
+            {"groupId": group_id}))
+    # Boost-Deaktivierung ueber die HCU-API erfolgt durch Zurueckschalten in den Automatikmodus.
+    return set_mode_sync(group_id, "AUTOMATIC")
+
+
+def set_party_sync(group_id, activate):
+    auth_token, _ = load_token()
+    if not auth_token: return False, "Kein Auth-Token"
+    if activate:
+        start = datetime.now()
+        end = start + timedelta(minutes=PARTY_MODE_DURATION_MINUTES)
+        body = {
+            "groupId": group_id,
+            "temperature": 21.0,
+            "startTime": start.strftime("%Y_%m_%d %H:%M"),
+            "endTime": end.strftime("%Y_%m_%d %H:%M"),
+        }
+        return asyncio.run(_send_ws_command(auth_token, "/hmip/group/heating/setPartyMode", body))
+    return set_mode_sync(group_id, "AUTOMATIC")
+
+
 async def fetch_system_state(auth_token):
     headers = {"authtoken": auth_token, "plugin-id": PLUGIN_ID, "hmip-system-events": "false"}
     try:
@@ -258,7 +348,8 @@ async def fetch_system_state(auth_token):
                 if msg.get("type") == "HMIP_SYSTEM_RESPONSE" and msg.get("id") == rid:
                     b = msg.get("body", {})
                     return b.get("body", {}) if b.get("code") == 200 else {}
-    except:
+    except Exception:
+        log_exc("fetch_system_state")
         return {}
 
 
@@ -274,9 +365,10 @@ def update_cache():
         if data:
             with CACHE_LOCK:
                 CACHE.update(data)
-                CACHE["_last_update"] = __import__("datetime").datetime.now().isoformat()
+                CACHE["_last_update"] = datetime.now().isoformat()
             return True
-    except: pass
+    except Exception:
+        log_exc("update_cache")
     return False
 
 
@@ -284,45 +376,54 @@ def sync_modbus_once(groups, weather):
     global _INTERNAL_SET, ROOM_COUNT, ROOM_CODE_MAP
     if not groups:
         return
-    for i in range(ROOM_COUNT):
-        _si(ROOM_ID_BASE + i, i)
-    _sh(HOLDING_GLOBAL, ROOM_COUNT)
+    with ROOMS_LOCK:
+        for i in range(ROOM_COUNT):
+            write_input(ROOM_ID_BASE + i, i)
+        write_holding(HOLDING_GLOBAL, ROOM_COUNT)
     if weather:
-        _si(INPUT_GLOBAL, int(weather.get("temperature", 0) * 10))
-        _si(INPUT_GLOBAL + 1, int(weather.get("humidity", 0)))
+        write_input(INPUT_GLOBAL, int(weather.get("temperature", 0) * 10))
+        write_input(INPUT_GLOBAL + 1, int(weather.get("humidity", 0)))
     for gid, grp in groups.items():
         if grp.get("type") != "HEATING":
             continue
         code = _room_code((grp.get("label") or "").strip())
         if not code:
             continue
-        i = ROOM_CODE_MAP.get(code)
-        if i is None:
-            label = (grp.get("label") or "").strip()
-            i = ROOM_COUNT
-            RAEUME.append(label)
-            ROOM_CODE_MAP[code] = i
-            ROOM_COUNT = i + 1
-            save_rooms()
-        GID_BY_CODE[code] = gid
-        addr = i * 4
+        with ROOMS_LOCK:
+            i = ROOM_CODE_MAP.get(code)
+            if i is None:
+                if ROOM_COUNT >= MAX_ROOMS:
+                    logger.warning(
+                        "Neuer Raum '%s' erkannt, aber MAX_ROOMS=%d bereits "
+                        "ausgeschoepft - Raum wird ignoriert. MAX_ROOMS in "
+                        "registers.py erhoehen.", code, MAX_ROOMS,
+                    )
+                    continue
+                label = (grp.get("label") or "").strip()
+                i = ROOM_COUNT
+                RAEUME.append(label)
+                ROOM_CODE_MAP[code] = i
+                ROOM_COUNT = i + 1
+                persist_rooms()
+            GID_BY_CODE[code] = gid
+        addr = i * ROOM_STRIDE
         ist  = int((grp.get("valveActualTemperature") or 0) * 10)
         vent = int((grp.get("valvePosition") or 0) * 1000)
         win  = {"OPEN": 1, "CLOSED": 0}.get(grp.get("windowState"), 65535)
         err  = (1 if grp.get("unreach") else 0) | (2 if grp.get("lowBat") else 0) | (4 if grp.get("heatingFailure") else 0)
-        _si(addr, ist)
-        _si(addr + 1, vent)
-        _si(addr + 2, win)
-        _si(addr + 3, err)
+        write_input(addr + OFF_IST, ist)
+        write_input(addr + OFF_VENTIL, vent)
+        write_input(addr + OFF_FENSTER, win)
+        write_input(addr + OFF_FEHLER, err)
         soll = int((grp.get("setPointTemperature") or 15) * 10)
         mode = {"AUTOMATIC": 0, "ECO": 1, "MANUAL": 2}.get(grp.get("controlMode"), 1)
         boost = 1 if grp.get("boostMode") else 0
         party = 1 if grp.get("partyMode") else 0
         _INTERNAL_SET = True
-        _sh(addr, soll)
-        _sh(addr + 1, mode)
-        _sh(addr + 2, boost)
-        _sh(addr + 3, party)
+        write_holding(addr + OFF_SOLL, soll)
+        write_holding(addr + OFF_MODUS, mode)
+        write_holding(addr + OFF_BOOST, boost)
+        write_holding(addr + OFF_PARTY, party)
         _INTERNAL_SET = False
 
 def sync_modbus_loop():
@@ -337,6 +438,21 @@ def sync_modbus_loop():
             groups = dict(CACHE.get("groups", {}))
             weather = CACHE.get("home", {}).get("weather", {})
         sync_modbus_once(groups, weather)
+
+
+MIN_TEMP, MAX_TEMP = 5.0, 30.0
+
+def _parse_json_body():
+    """Parst den Request-Body als JSON und liefert (body, error_response).
+    Faengt kaputtes JSON ab statt es als unbehandelte Exception (HTTP 500)
+    durchschlagen zu lassen (siehe Analyse-Report Punkt 1.6)."""
+    try:
+        body = request.get_json(force=True, silent=False)
+        if not isinstance(body, dict):
+            return None, (jsonify({"ok": False, "error": "JSON-Objekt erwartet"}), 400)
+        return body, None
+    except Exception:
+        return None, (jsonify({"ok": False, "error": "Ungueltiges JSON"}), 400)
 
 
 @app.route("/")
@@ -379,54 +495,60 @@ def api_data():
 
 @app.route("/api/modbus")
 def api_modbus():
+    with ROOMS_LOCK:
+        raeume_snapshot = list(RAEUME)
     rooms = []
-    for i, name in enumerate(RAEUME):
-        addr = i * 4
+    for i, name in enumerate(raeume_snapshot):
+        addr = i * ROOM_STRIDE
+        mode_raw = read_holding(addr + OFF_MODUS)
         rooms.append({
             "i": i, "name": name,
-            "room_id": _gi(ROOM_ID_BASE + i),
-            "soll": _gh(addr),               "soll_c": _gh(addr) / 10,
-            "mode_raw": _gh(addr + 1),
-            "mode": ["AUTO","ECO","MANUAL"][_gh(addr + 1)] if _gh(addr + 1) <= 2 else "?",
-            "boost": _gh(addr + 2),          "party": _gh(addr + 3),
-            "ist": _gi(addr),                "ist_c": _gi(addr) / 10,
-            "ventil": _gi(addr + 1),          "ventil_pct": _gi(addr + 1) / 10,
-            "fenster": _gi(addr + 2),         "fehler": _gi(addr + 3),
+            "room_id": read_input(ROOM_ID_BASE + i),
+            "soll": read_holding(addr + OFF_SOLL), "soll_c": read_holding(addr + OFF_SOLL) / 10,
+            "mode_raw": mode_raw,
+            "mode": MODE_NAMES[mode_raw] if mode_raw <= 2 else "?",
+            "boost": read_holding(addr + OFF_BOOST), "party": read_holding(addr + OFF_PARTY),
+            "ist": read_input(addr + OFF_IST), "ist_c": read_input(addr + OFF_IST) / 10,
+            "ventil": read_input(addr + OFF_VENTIL), "ventil_pct": read_input(addr + OFF_VENTIL) / 10,
+            "fenster": read_input(addr + OFF_FENSTER), "fehler": read_input(addr + OFF_FEHLER),
         })
     return jsonify({
         "rooms": rooms,
-        "aussentemp": _gi(INPUT_GLOBAL),
-        "aussentemp_c": _gi(INPUT_GLOBAL) / 10,
-        "feuchte": _gi(INPUT_GLOBAL + 1),
-        "wetter": _gi(INPUT_GLOBAL + 2),
+        "aussentemp": read_input(INPUT_GLOBAL),
+        "aussentemp_c": read_input(INPUT_GLOBAL) / 10,
+        "feuchte": read_input(INPUT_GLOBAL + 1),
+        "wetter": read_input(INPUT_GLOBAL + 2),
     })
 
 
 @app.route("/api/move-room/<int:idx>/<direction>", methods=["POST"])
 def api_move_room(idx, direction):
-    if direction == "up" and idx > 0:
-        RAEUME[idx], RAEUME[idx-1] = RAEUME[idx-1], RAEUME[idx]
-    elif direction == "down" and idx < ROOM_COUNT - 1:
-        RAEUME[idx], RAEUME[idx+1] = RAEUME[idx+1], RAEUME[idx]
-    else:
-        return jsonify({"ok": False}), 400
     global ROOM_CODE_MAP
-    ROOM_CODE_MAP = {_room_code(r): i for i, r in enumerate(RAEUME)}
-    _sh(HOLDING_GLOBAL, ROOM_COUNT)
-    rewrite_rooms()
+    with ROOMS_LOCK:
+        if direction == "up" and idx > 0:
+            RAEUME[idx], RAEUME[idx-1] = RAEUME[idx-1], RAEUME[idx]
+        elif direction == "down" and idx < ROOM_COUNT - 1:
+            RAEUME[idx], RAEUME[idx+1] = RAEUME[idx+1], RAEUME[idx]
+        else:
+            return jsonify({"ok": False}), 400
+        ROOM_CODE_MAP = {_room_code(r): i for i, r in enumerate(RAEUME)}
+        write_holding(HOLDING_GLOBAL, ROOM_COUNT)
+        persist_rooms()
     return jsonify({"ok": True})
 
 @app.route("/api/registers")
 def api_registers():
+    with ROOMS_LOCK:
+        room_count = ROOM_COUNT
     regs = []
-    for i in range(ROOM_COUNT):
-        a = i * 4
+    for i in range(room_count):
+        a = i * ROOM_STRIDE
         for off in range(4):
-            regs.append({"a": hex(a + off), "hr": _gh(a + off), "ir": _gi(a + off)})
+            regs.append({"a": hex(a + off), "hr": read_holding(a + off), "ir": read_input(a + off)})
     for off in range(3):
-        regs.append({"a": hex(INPUT_GLOBAL + off), "hr": "-", "ir": _gi(INPUT_GLOBAL + off)})
-    for i in range(ROOM_COUNT):
-        regs.append({"a": hex(ROOM_ID_BASE + i), "hr": "-", "ir": _gi(ROOM_ID_BASE + i)})
+        regs.append({"a": hex(INPUT_GLOBAL + off), "hr": "-", "ir": read_input(INPUT_GLOBAL + off)})
+    for i in range(room_count):
+        regs.append({"a": hex(ROOM_ID_BASE + i), "hr": "-", "ir": read_input(ROOM_ID_BASE + i)})
     return jsonify({"regs": regs})
 
 @app.route("/api/raw")
@@ -449,27 +571,38 @@ def api_refresh():
 
 @app.route("/api/set-temp", methods=["POST"])
 def api_set_temp():
-    body = request.get_json(force=True)
+    body, err = _parse_json_body()
+    if err: return err
     gid, temp = body.get("group_id"), body.get("temperature")
     if not gid or temp is None:
         return jsonify({"ok": False, "error": "group_id und temperature"}), 400
-    _enqueue_cmd("temp", gid, float(temp))
+    try:
+        temp = float(temp)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "temperature muss eine Zahl sein"}), 400
+    if not (MIN_TEMP <= temp <= MAX_TEMP):
+        return jsonify({"ok": False, "error": f"temperature muss zwischen {MIN_TEMP} und {MAX_TEMP} liegen"}), 400
+    _enqueue_cmd("temp", gid, temp)
     return jsonify({"ok": True, "msg": "eingereiht"})
 
 
 @app.route("/api/set-mode", methods=["POST"])
 def api_set_mode():
-    body = request.get_json(force=True)
+    body, err = _parse_json_body()
+    if err: return err
     gid, mode = body.get("group_id"), body.get("mode")
     if not gid or not mode:
         return jsonify({"ok": False, "error": "group_id und mode"}), 400
+    if mode not in MODE_NAMES:
+        return jsonify({"ok": False, "error": f"mode muss einer von {MODE_NAMES} sein"}), 400
     _enqueue_cmd("mode", gid, mode)
     return jsonify({"ok": True, "msg": "eingereiht"})
 
 
 @app.route("/api/renew-token", methods=["POST"])
 def api_renew_token():
-    body = request.get_json(force=True)
+    body, err = _parse_json_body()
+    if err: return err
     key = body.get("activation_key")
     if not key: return jsonify({"ok": False, "error": "activation_key"}), 400
     ok, msg = renew_token(str(key).strip())

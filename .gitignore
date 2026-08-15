@@ -1,2 +1,4 @@
 __pycache__
 venv
+auth_token.json
+hcu_ca.pem

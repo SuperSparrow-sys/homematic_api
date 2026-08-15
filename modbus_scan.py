@@ -5,26 +5,37 @@ testet Lesen/Schreiben pro Raum.
 Aufruf: python modbus_scan.py [host] [port]
 Standard: 127.0.0.1:502
 """
-import sys, socket
+import sys, socket, os
 from pymodbus.client import ModbusTcpClient
+from registers import ROOM_ID_BASE, ROOM_STRIDE, MAX_ROOMS
 
 HOST = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
 PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 502
 
-RAEUME = [
-    "A001 (Werkstatt)","A101 (Schleiferei)","A102 (QS)","A103 (Server)",
-    "A201 (Umkleide Herren)","A202 (IT)","A203 (Vorraum)","A210 (Büro)",
-    "A211 (Büro)","A213 (Besprechung)","C004 (TH)","C102 (Flur)",
-    "C103 (AV)","C104 (Meister)","C106 (WC-D)","C107 (WC)",
-    "C108 (WC-H)","C111 (Aufenthaltsraum)","C202 (Flur)","C203 (Büro)",
-    "D003 (TH)","D004 (Umkleide)","D104 (Besprechung)","D105 (Einkauf)",
-    "D203 (WC-D)","D204 (Konstruktion)","D302 (WC-H)","D303 (WC-D)",
-    "D304 (Küche)","D305 (Projektleitung)","D306 (Abstellraum)","D307 (Besprechung)",
-    "D308 (Besprechung)",
-]
-ROOM_ID_BASE = 0x2000
+# Raumliste wird aus rooms.txt gelesen statt hier eigenstaendig dupliziert zu
+# werden (siehe Analyse-Report Punkt 3.1) - das ist die selbe Datei, aus der
+# main.py die Modbus-Indizes ableitet, damit Anzeige und tatsaechliche
+# Belegung nicht auseinanderlaufen koennen.
+_ROOMS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rooms.txt")
+
+def _load_raeume():
+    if os.path.exists(_ROOMS_FILE):
+        with open(_ROOMS_FILE, encoding="utf-8") as f:
+            rooms = [line.strip() for line in f if line.strip()]
+        if rooms:
+            return rooms
+    print("  [WARN] rooms.txt nicht gefunden/leer neben modbus_scan.py - "
+          "Raumnamen werden als 'Raum <i>' angezeigt.")
+    return []
+
+RAEUME = _load_raeume()
 
 def e(s): print("  FEHLER: " + s)
+
+def w(context, exc):
+    """Loggt eine unterdrueckte Exception statt sie stillschweigend zu
+    ignorieren (siehe Analyse-Report Punkt 2.5)."""
+    print("  [WARN] %s: %s" % (context, exc))
 
 def scan():
     # Eigene IP
@@ -33,8 +44,9 @@ def scan():
         s.connect((HOST, PORT))
         eigene_ip = s.getsockname()[0]
         s.close()
-    except:
+    except Exception as ex:
         eigene_ip = "unbekannt"
+        w("Eigene-IP-Ermittlung", ex)
 
     print("=" * 58)
     print("  Modbus Scanner")
@@ -59,8 +71,8 @@ def scan():
             rr = c.read_holding_registers(0, count=1, slave=sid)
             if rr and not hasattr(rr, 'exception_code'):
                 slaves.append(sid)
-        except:
-            pass
+        except Exception as ex:
+            w("Slave-Scan sid=%d" % sid, ex)
     if slaves:
         print("gefunden: %s" % slaves)
     else:
@@ -68,16 +80,17 @@ def scan():
         slaves = [1]
     print()
 
-    # Anzahl Raeume aus Holding 0x1000
+    # Anzahl Raeume aus Holding 0x1000, sonst aus rooms.txt, sonst MAX_ROOMS
     sid = slaves[0]
-    raum_count = ROOM_COUNT = len(RAEUME)
+    raum_count = ROOM_COUNT = len(RAEUME) if RAEUME else MAX_ROOMS
     try:
         rr = c.read_holding_registers(0x1000, count=1, slave=sid)
         if rr and not hasattr(rr, 'exception_code') and rr.registers:
             raum_count = rr.registers[0]
             print("  Anzahl Raeume (HR 0x1000): %d" % raum_count)
-    except:
+    except Exception as ex:
         print("  Anzahl Raeume: %d (laut Konfiguration)" % ROOM_COUNT)
+        w("Raumzahl lesen (HR 0x1000)", ex)
     print()
 
     # Globale Register testen
@@ -96,8 +109,9 @@ def scan():
                     print("    %-20s = %s" % (name, rr.registers[0] if rr.registers else "?"))
                 else:
                     print("    %-20s -" % name)
-        except:
+        except Exception as ex:
             print("    %-20s FEHLER" % name)
+            w("Globales Register %s" % name, ex)
     print()
 
     # Alle Raeume
@@ -106,7 +120,7 @@ def scan():
     print("  " + "-" * 80)
     for i in range(min(raum_count, ROOM_COUNT)):
         name = RAEUME[i] if i < len(RAEUME) else "Raum %d" % i
-        addr = i * 4
+        addr = i * ROOM_STRIDE
         hr_ok = ir_ok = write_ok = False
         hr_vals = ["-", "-", "-", "-"]
         ir_vals = ["-", "-", "-", "-"]
@@ -117,16 +131,16 @@ def scan():
             if rr and not hasattr(rr, 'exception_code') and rr.registers:
                 hr_ok = True
                 hr_vals = [str(v) for v in rr.registers]
-        except:
-            pass
+        except Exception as ex:
+            w("HR lesen Raum %d" % i, ex)
 
         try:
             rr = c.read_input_registers(addr, count=4, slave=sid)
             if rr and not hasattr(rr, 'exception_code') and rr.registers:
                 ir_ok = True
                 ir_vals = [str(v) for v in rr.registers]
-        except:
-            pass
+        except Exception as ex:
+            w("IR lesen Raum %d" % i, ex)
 
         try:
             rr = c.read_input_registers(ROOM_ID_BASE + i, count=1, slave=sid)
@@ -134,8 +148,8 @@ def scan():
                 room_id = rr.registers[0]
                 if room_id != i:
                     room_id = "!%d" % room_id
-        except:
-            pass
+        except Exception as ex:
+            w("Room-ID lesen Raum %d" % i, ex)
 
         hr_str = "%s/%s/%s/%s" % tuple(hr_vals)
         ir_str = "%s/%s/%s/%s" % tuple(ir_vals)

@@ -63,7 +63,7 @@ code{font-family:'Cascadia Code','Fira Code','Consolas',monospace}
 <strong>Input Register (IR)</strong> – SPS liest:<br>
 &nbsp;&nbsp;+0 Isttemp x10 &nbsp; +1 Ventil 0-1000 &nbsp; +2 Fenster 0/1/65535 &nbsp; +3 Fehler (Bitmask)<br>
 <strong>Global:</strong> IR 4096=Aussentemp &nbsp; 4097=Feuchte &nbsp; 4098=Wetter &nbsp; HR 4096=Raumanzahl<br>
-<strong>Room-ID:</strong> IR 8192+i = Index i (0-32) &nbsp; <strong>Basisadresse</strong> = Raumindex x 4
+<strong>Room-ID:</strong> IR 8192+i = Index i (0-63, vorallokiert) &nbsp; <strong>Basisadresse</strong> = Raumindex x 4
 </div>
 <table class="rg"><thead><tr>
 <th>Adresse</th><th>Belegung</th><th>HR</th><th>IR</th>
@@ -77,6 +77,15 @@ code{font-family:'Cascadia Code','Fira Code','Consolas',monospace}
  <pre><code id="raw-json"></code></pre>
 </div>
 <script>
+// HTML-Escaping fuer alle Werte, die aus HCU-Gruppendaten (Raumnamen,
+// Modus etc.) stammen und per innerHTML eingefuegt werden. Diese Werte sind
+// nicht vertrauenswuerdig (siehe Analyse-Report Punkt 1.5): wer HCU-Gruppen
+// umbenennen kann, koennte sonst HTML/JS ins Dashboard einschleusen.
+function esc(s){
+ return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+ });
+}
 var _blocked=false;
 document.addEventListener('focusin',function(e){if((e.target.tagName==='INPUT'||e.target.tagName==='SELECT')&&e.target.id!=='raw-search')_blocked=true});
 document.addEventListener('focusout',function(e){if((e.target.tagName==='INPUT'||e.target.tagName==='SELECT')&&e.target.id!=='raw-search')_blocked=false});
@@ -96,13 +105,13 @@ async function loadHCU(){
   const w=d.weather||{};
   s.innerHTML='<span class=ok>&#10003;</span> Wetter: '+(w.temperature||'?')+'°C '+((w.humidity||'?')+'%').padStart(2);
   document.getElementById('hcu-tbody').innerHTML=d.heating.map(r=>
-   '<tr><td class=l>'+(r.raum||'?')+'</td>'
+   '<tr><td class=l>'+esc(r.raum||'?')+'</td>'
    +'<td>'+(r.soll_temp!=null?r.soll_temp.toFixed(1):'-')+'</td><td>'+(r.ist_temp!=null?r.ist_temp.toFixed(1):'-')+'</td>'
-   +'<td class='+(r.modus||'?').toLowerCase()+'>'+(r.modus||'?')+'</td>'
+   +'<td class="'+esc((r.modus||'?').toLowerCase())+'">'+esc(r.modus||'?')+'</td>'
    +'<td>'+((r.ventil||0)*100).toFixed(0)+'%</td>'
     +'<td>'+(r.boost?'<span class="badge bo">BOOST</span>':'')+'</td>'
     +'<td>'+(r.party?'<span class="badge pa">PARTY</span>':'')+'</td>'
-    +'<td'+(r.fenster==='OPEN'?' style=color:#dc2626':'')+'>'+(r.fenster==='OPEN'?'OFFEN':r.fenster||'-')+'</td>'
+    +'<td'+(r.fenster==='OPEN'?' style=color:#dc2626':'')+'>'+esc(r.fenster==='OPEN'?'OFFEN':r.fenster||'-')+'</td>'
    +'<td>'+(r.unreach?'U ':'')+(r.lowbat?'B ':'')+(r.heating_failure?'HF ':'')+'</td>'
    +'<td><input type=number step=0.5 value='+(r.soll_temp!=null?r.soll_temp.toFixed(1):'')+' style=width:58px onchange="setTemp(\''+r.id+'\',this.value)">'
     +'<select onchange="setMode(\''+r.id+'\',this.value)"><option'+(r.modus==='AUTOMATIC'?' selected':'')+'>AUTOMATIC</option><option'+(r.modus==='ECO'?' selected':'')+'>ECO</option><option'+(r.modus==='MANUAL'?' selected':'')+'>MANUAL</option></select></td></tr>'
@@ -119,7 +128,7 @@ async function loadMB(){
    '<tr><td style=white-space:nowrap>'
    +(i>0?'<span class=arr onclick="moveRoom('+i+',\'up\')">&#9650;</span>':'<span style=opacity:.2>&#9650;</span>')
    +(i<d.rooms.length-1?'<span class=arr onclick="moveRoom('+i+',\'down\')">&#9660;</span>':'<span style=opacity:.2>&#9660;</span>')
-   +'</td><td class=l>'+r.name+'</td>'
+   +'</td><td class=l>'+esc(r.name)+'</td>'
    +'<td>'+(r.room_id)+'</td>'
    +'<td>'+r.soll_c.toFixed(1)+'</td><td>'+r.ist_c.toFixed(1)+'</td>'
    +'<td class='+(r.mode_raw===0?'auto':r.mode_raw===1?'eco':'manual')+'>'+r.mode+'</td>'

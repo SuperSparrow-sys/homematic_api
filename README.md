@@ -10,7 +10,7 @@ Echtzeit-Brücke zwischen einer **Homematic IP Central (HCU)** und einer **SPS p
 
 - **Raspberry Pi** (getestet Pi 5, 2 GB – ~100 MB RAM im Betrieb)
 - **OS**: Raspberry Pi OS Lite (Bookworm, 64-bit) oder Ubuntu Server 24.04 LTS
-- Netzwerkverbindung zu HCU (192.168.0.90:6969/WSS) und SPS (Modbus TCP Port 502)
+- Netzwerkverbindung zu HCU (172.168.1.124:6969/WSS) und SPS (Modbus TCP Port 502)
 
 ## Installation
 
@@ -38,7 +38,7 @@ sudo setcap cap_net_bind_service=+ep $(readlink -f .venv/bin/python)
 In `main.py` oben die HCU-IP anpassen:
 
 ```python
-HCU_IP = "192.168.0.90"
+HCU_IP = "172.168.1.124"
 ```
 
 Die Raumliste wird in **`rooms.txt`** gespeichert (eine Zeile pro Raum, Format: `Code (Name)`).
@@ -58,12 +58,42 @@ Erster Start fordert zur Eingabe des **HCU-Aktivierungsschlüssels** auf:
 2. Schlüssel eingeben → Token wird in `auth_token.json` gespeichert
 3. `main.py` neu starten
 
+`auth_token.json` enthält den vollständigen Zugangs-Token zur HCU und ist per
+`.gitignore` bewusst vom Commit ausgeschlossen – diese Datei darf niemals ins
+Repository committet werden. Wurde sie versehentlich bereits committet, gilt
+der enthaltene Token als kompromittiert: auf der HCU neu ausstellen und lokal
+ersetzen.
+
 Der Sync-Lauf aktualisiert alle 2 Sekunden die Modbus-Register aus dem HCU-Cache.
+
+## TLS
+
+Die Verbindung zur HCU wird standardmäßig **nicht** zertifikatsverifiziert, da
+die HCU ein selbstsigniertes Zertifikat verwendet. Um die Verbindung gegen
+Man-in-the-Middle-Angriffe im lokalen Netz abzusichern, kann das HCU-Zertifikat
+gepinnt werden:
+
+```bash
+openssl s_client -connect <HCU_IP>:6969 -showcerts </dev/null 2>/dev/null \
+  | openssl x509 -outform PEM > hcu_ca.pem
+```
+
+Die Datei `hcu_ca.pem` neben `main.py` ablegen (sie ist per `.gitignore`
+ebenfalls vom Commit ausgeschlossen) – ist sie vorhanden, verifiziert
+`main.py` beim Start automatisch gegen dieses Zertifikat und meldet das im
+Log. Ohne die Datei bleibt die bisherige, unverifizierte Verbindung als
+Fallback aktiv (mit Warnung beim Start).
 
 ## Register-Map (Kurzreferenz)
 
+Einzige Quelle der Wahrheit für Adressen/Offsets ist `registers.py` – Code
+(`main.py`, `modbus_scan.py`) und diese Tabelle müssen bei Änderungen daran
+ausgerichtet werden.
+
 Pro Raum (Index 0–n): Basis-Adresse = Index × 4, 4 Holding + 4 Input Register.
 Die Index-Reihenfolge wird durch `rooms.txt` bestimmt und bleibt stabil.
+Es sind Register für bis zu 64 Räume vorallokiert (`MAX_ROOMS` in
+`registers.py`); die tatsächliche Anzahl steht in HR 0x1000.
 
 | Offset | Holding (HR) – SPS schreibt | Input (IR) – SPS liest |
 |--------|---------------------------|------------------------|
@@ -80,7 +110,7 @@ Globale Register:
 | IR 0x1001 | int16 | Luftfeuchte |
 | IR 0x1002 | int16 | Wettercode |
 | HR 0x1000 | int16 | Anzahl Räume (read-only) |
-| IR 0x2000 + i | int16 | Room-ID = Index `i` (0–32) – **Raumerkennung** |
+| IR 0x2000 + i | int16 | Room-ID = Index `i` (0–63, vorallokiert) – **Raumerkennung** |
 
 Room-ID-Prüfung durch SPS:
 
@@ -93,8 +123,10 @@ read_input_registers(0x2000 + i, 1) → muss Wert i liefern
 | Datei | Zweck |
 |-------|-------|
 | `main.py` | Bridge-Logik (HCU-WebSocket, Modbus-Server, Sync, Dashboard) |
+| `registers.py` | Zentrale Register-Layout-Konstanten – **Quelle der Wahrheit für Adressen/Offsets** |
 | `rooms.txt` | Persistierte Raumliste – **Quelle der Modbus-Index-Reihenfolge** |
-| `auth_token.json` | Persistierter HCU-Auth-Token (wird nur bei manueller Erneuerung geschrieben) |
+| `auth_token.json` | Persistierter HCU-Auth-Token (wird nur bei manueller Erneuerung geschrieben, **nicht committen**) |
+| `hcu_ca.pem` | Optional: gepinntes HCU-Zertifikat für TLS-Verifikation (**nicht committen**) |
 | `templates/index.html` | Dashboard (HCU / Modbus / Raw JSON) |
 | `modbus_scan.py` | Diagnose: scannt alle Register, testet Schreibbarkeit, prüft Room-IDs |
 | `REGISTERMAP.md` | Vollständige Register-Dokumentation |

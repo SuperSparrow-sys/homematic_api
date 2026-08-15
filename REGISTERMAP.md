@@ -2,6 +2,11 @@
 
 TCP Port **502** (Standard), Slave-ID **1**.
 
+Einzige Quelle der Wahrheit für Adressen/Offsets ist `registers.py` – diese
+Doku muss bei Änderungen daran manuell nachgezogen werden (siehe
+Analyse-Report Punkt 3.1). Es sind Register für bis zu 64 Räume vorallokiert
+(`MAX_ROOMS`); die tatsächlich genutzte Anzahl steht read-only in HR 0x1000.
+
 ## Holding Register (4xxxx) – SPS lesen/schreiben
 
 Basisadresse pro Raum = `raum_index × 4`.
