@@ -4,83 +4,218 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>HCU Bridge</title>
 <style>
+:root{
+  --bg:#eef0f2;
+  --surface:#ffffff;
+  --surface-2:#f4f5f7;
+  --border:#d3d7dd;
+  --border-strong:#aeb4bd;
+  --text:#1a1d22;
+  --text-muted:#5b6270;
+  --accent:#1a1d22;
+  --ok:#1f7a3d;
+  --err:#c0311a;
+  --auto:#1f7a3d;
+  --eco:#1c5fc4;
+  --manual:#c0311a;
+  --boost:#a1650a;
+  --party:#9b2a72;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", "Consolas", "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:system-ui,sans-serif;background:#f5f5f5;color:#111;padding:16px}
-h1{font-size:1.2rem;margin-bottom:4px}
-.tabs{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
-.tabs button{padding:6px 16px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:.85rem}
-.tabs button.active{background:#111;color:#fff;border-color:#111}
-.panel{display:none}.panel.active{display:block}
-.status{font-size:.8rem;margin-bottom:8px;display:flex;gap:12px;flex-wrap:wrap}
-.ok{color:#16a34a}.err{color:#dc2626}
-table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);font-size:.75rem}
-th{background:#e5e7eb;padding:5px 4px;text-align:center;white-space:nowrap}
-td{padding:4px;text-align:center;border-top:1px solid #e5e7eb}
-td.l{text-align:left;font-weight:500}
-.auto{color:#16a34a;font-weight:600}.automatic{color:#16a34a;font-weight:600}.eco{color:#2563eb;font-weight:600}.manual{color:#dc2626;font-weight:600}
-.badge{display:inline-block;padding:0 4px;border-radius:3px;font-size:.65rem}
-.bo{background:#fef3c7;color:#92400e}.pa{background:#fce7f3;color:#9d174d}
-input[type=number]{width:58px;padding:2px 4px;font-size:.75rem;text-align:center;border:1px solid #ccc;border-radius:4px}
-select{padding:2px 4px;font-size:.75rem;border:1px solid #ccc;border-radius:4px}
-pre{background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:8px;font-size:.7rem;overflow:auto;max-height:80vh;white-space:pre-wrap;word-break:break-all}
-code{font-family:'Cascadia Code','Fira Code','Consolas',monospace}
-.arr{cursor:pointer;padding:0 4px;user-select:none;font-size:.9rem;color:#555}
-.arr:hover{color:#111}
-.rg{font-size:.7rem}
-.rg td{font-family:'Consolas','Courier New',monospace}
-.s0{color:#999}.s1{color:#16a34a}
+body{
+  font-family:var(--sans);
+  background:var(--bg);
+  color:var(--text);
+  font-size:14px;
+}
+.wrap{max-width:1200px;margin:0 auto;padding:20px 24px 56px}
+
+/* header */
+header{
+  display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px 24px;
+  padding-bottom:14px;margin-bottom:16px;border-bottom:1px solid var(--border-strong);
+}
+.brand h1{font-size:1.15rem;font-weight:700;letter-spacing:-.01em}
+.brand p{font-family:var(--mono);font-size:.72rem;color:var(--text-muted);margin-top:2px}
+.toolbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+
+.tabs{display:flex;border:1px solid var(--border-strong)}
+.tabs button{
+  font-family:var(--sans);font-size:.78rem;font-weight:600;color:var(--text);
+  padding:7px 16px;border:0;background:var(--surface);cursor:pointer;
+  border-right:1px solid var(--border-strong);
+}
+.tabs button:last-child{border-right:0}
+.tabs button.active{background:var(--text);color:#fff}
+.tabs button:hover:not(.active){background:var(--surface-2)}
+
+.btn{
+  font-family:var(--sans);font-size:.78rem;font-weight:600;color:var(--text);
+  padding:7px 14px;border:1px solid var(--border-strong);background:var(--surface);cursor:pointer;
+}
+.btn:hover{background:var(--surface-2)}
+
+.panel{display:none}
+.panel.active{display:block}
+
+.status{
+  font-family:var(--mono);font-size:.76rem;color:var(--text-muted);
+  display:flex;gap:18px;flex-wrap:wrap;align-items:center;
+  padding:9px 0;margin-bottom:10px;
+}
+.dot{display:inline-block;width:7px;height:7px;background:var(--ok);margin-right:6px;vertical-align:middle}
+.dot.err{background:var(--err)}
+.err-text{color:var(--err)}
+
+/* tables */
+.table-wrap{overflow-x:auto;border:1px solid var(--border-strong);background:var(--surface)}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+th{
+  font-family:var(--mono);font-size:.66rem;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--text-muted);background:var(--surface-2);text-align:right;padding:8px 10px;
+  border-bottom:1px solid var(--border-strong);white-space:nowrap;
+}
+th.l{text-align:left}
+td{
+  padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);
+  font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+td.l{text-align:left;font-family:var(--sans);font-weight:500}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--surface-2)}
+
+.auto,.automatic{color:var(--auto);font-weight:600}
+.eco{color:var(--eco);font-weight:600}
+.manual{color:var(--manual);font-weight:600}
+.win-open{color:var(--err);font-weight:600}
+
+.tag{
+  display:inline-block;font-family:var(--mono);font-size:.65rem;font-weight:700;letter-spacing:.03em;
+  padding:1px 6px;border:1px solid currentColor;
+}
+.tag.boost{color:var(--boost)}
+.tag.party{color:var(--party)}
+
+input[type=number]{
+  width:56px;padding:3px 5px;font-family:var(--mono);font-size:.78rem;text-align:right;
+  border:1px solid var(--border-strong);background:var(--surface);color:var(--text);
+}
+select{
+  padding:3px 5px;font-family:var(--sans);font-size:.75rem;
+  border:1px solid var(--border-strong);background:var(--surface);color:var(--text);
+}
+input[type=number]:focus,select:focus,#raw-search:focus{outline:2px solid var(--text);outline-offset:-1px}
+
+.arr{cursor:pointer;padding:0 3px;user-select:none;font-size:.72rem;color:var(--text-muted)}
+.arr:hover{color:var(--text)}
+.arr.disabled{opacity:.25;cursor:default}
+.arr.disabled:hover{color:var(--text-muted)}
+
+/* info box (register tab) */
+.info{
+  font-size:.78rem;color:var(--text-muted);background:var(--surface);border:1px solid var(--border-strong);
+  padding:12px 14px;margin-bottom:12px;display:grid;gap:8px 28px;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+}
+.info .grp b{display:block;color:var(--text);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.info code{font-family:var(--mono);background:var(--surface-2);border:1px solid var(--border);padding:0 3px}
+
+/* raw tab */
+.searchbar{margin-bottom:10px}
+.searchbar input{
+  width:100%;max-width:340px;padding:6px 10px;font-family:var(--mono);font-size:.78rem;
+  border:1px solid var(--border-strong);background:var(--surface);color:var(--text);
+}
+pre{
+  background:#1a1d22;color:#d6d9de;padding:14px;font-family:var(--mono);font-size:.72rem;
+  overflow:auto;max-height:75vh;white-space:pre-wrap;word-break:break-all;border:1px solid var(--border-strong);
+}
+
+@media (max-width:640px){
+  .wrap{padding:14px 12px 40px}
+  header{align-items:flex-start}
+}
 </style>
 </head>
 <body>
-<h1>HCU Bridge</h1>
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px">
-<div class="tabs" style="margin-bottom:0">
-<button class="active" onclick="switchTab('hcu')">HCU</button>
-<button onclick="switchTab('modbus')">Modbus (SPS)</button>
-<button onclick="switchTab('regs')">Register</button>
-<button onclick="switchTab('raw')">Raw JSON</button>
-</div>
-<button onclick="refresh()" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:.8rem">&#x21bb; Neu laden</button>
-</div>
+<div class="wrap">
+
+<header>
+  <div class="brand">
+    <h1>HCU Bridge</h1>
+    <p>Homematic IP ↔ SPS · Modbus TCP</p>
+  </div>
+  <div class="toolbar">
+    <div class="tabs">
+      <button class="active" onclick="switchTab('hcu')">HCU</button>
+      <button onclick="switchTab('modbus')">Modbus (SPS)</button>
+      <button onclick="switchTab('regs')">Register</button>
+      <button onclick="switchTab('raw')">Raw JSON</button>
+    </div>
+    <button class="btn" onclick="refresh()">&#x21bb; Neu laden</button>
+  </div>
+</header>
+
 <div id="tab-hcu" class="panel active">
-<div class="status" id="hcu-status">Lade...</div>
+<div class="status" id="hcu-status">Lade …</div>
+<div class="table-wrap">
 <table><thead><tr>
-<th>Raum</th><th>Soll</th><th>Ist</th><th>Modus</th><th>Ventil</th><th>Boost</th><th>Party</th><th>Fenster</th><th>Fehler</th><th></th>
+<th class="l">Raum</th><th>Soll</th><th>Ist</th><th class="l">Modus</th><th>Ventil</th><th>Boost</th><th>Party</th><th class="l">Fenster</th><th class="l">Fehler</th><th class="l">Steuerung</th>
 </tr></thead><tbody id="hcu-tbody"></tbody></table>
 </div>
+</div>
+
 <div id="tab-modbus" class="panel">
-<div class="status" id="mb-status">Lade...</div>
+<div class="status" id="mb-status">Lade …</div>
+<div class="table-wrap">
 <table><thead><tr>
-<th></th><th>Raum</th><th>ID</th><th>Soll</th><th>Ist</th><th>Modus</th><th>Ventil%</th><th>Boost</th><th>Party</th><th>Fenster</th><th>Fehler</th>
+<th></th><th class="l">Raum</th><th>ID</th><th>Soll</th><th>Ist</th><th class="l">Modus</th><th>Ventil %</th><th>Boost</th><th>Party</th><th class="l">Fenster</th><th>Fehler</th>
 </tr></thead><tbody id="mb-tbody"></tbody></table>
 </div>
-<div id="tab-regs" class="panel">
-<div class="status" id="reg-status">Lade...</div>
-<div style="font-size:.75rem;background:#fff;border-radius:8px;padding:8px 12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
-<strong>Register-Map</strong><br>
-<strong>Holding Register (HR)</strong> – SPS schreibt:<br>
-&nbsp;&nbsp;+0 Solltemp x10 &nbsp; +1 Modus 0=AUTO/1=ECO/2=MANUAL &nbsp; +2 Boost &nbsp; +3 Party<br>
-<strong>Input Register (IR)</strong> – SPS liest:<br>
-&nbsp;&nbsp;+0 Isttemp x10 &nbsp; +1 Ventil 0-1000 &nbsp; +2 Fenster 0/1/65535 &nbsp; +3 Fehler (Bitmask)<br>
-<strong>Global:</strong> IR 4096=Aussentemp &nbsp; 4097=Feuchte &nbsp; 4098=Wetter &nbsp; HR 4096=Raumanzahl<br>
-<strong>Room-ID:</strong> IR 8192+i = Index i (0-63, vorallokiert) &nbsp; <strong>Basisadresse</strong> = Raumindex x 4
 </div>
-<table class="rg"><thead><tr>
-<th>Adresse</th><th>Belegung</th><th>HR</th><th>IR</th>
+
+<div id="tab-regs" class="panel">
+<div class="status" id="reg-status">Lade …</div>
+<div class="info">
+  <div class="grp"><b>Holding Register (HR) — SPS schreibt</b>
+    +0 Solltemp ×10 &nbsp;·&nbsp; +1 Modus (0=AUTO/1=ECO/2=MANUAL) &nbsp;·&nbsp; +2 Boost &nbsp;·&nbsp; +3 Party
+  </div>
+  <div class="grp"><b>Input Register (IR) — SPS liest</b>
+    +0 Isttemp ×10 &nbsp;·&nbsp; +1 Ventil 0–1000 &nbsp;·&nbsp; +2 Fenster (0=ZU/1=OFFEN/65535=kein Sensor) &nbsp;·&nbsp; +3 Fehler (Bitmask)
+  </div>
+  <div class="grp"><b>Global</b>
+    <code>IR 0x1000</code> Außentemp ×10 &nbsp;·&nbsp; <code>IR 0x1001</code> Feuchte &nbsp;·&nbsp; <code>IR 0x1002</code> Wetter &nbsp;·&nbsp; <code>HR 0x1000</code> Raumanzahl
+  </div>
+  <div class="grp"><b>Room-ID</b>
+    <code>IR 0x2000+i</code> = Prüfsumme aus Raumcode (0–63, vorallokiert) &nbsp;·&nbsp; Basisadresse je Raum = Index × 4
+  </div>
+  <div class="grp"><b>Hinweis</b>
+    Soll-/Isttemp und Außentemp sind vorzeichenbehaftet (int16) — Rohwerte &gt; 32767 entsprechen Wert − 65536.
+  </div>
+</div>
+<div class="table-wrap">
+<table><thead><tr>
+<th class="l">Adresse</th><th class="l">HR-Feld</th><th>HR</th><th class="l">IR-Feld</th><th>IR</th>
 </tr></thead><tbody id="reg-tbody"></tbody></table>
 </div>
+</div>
+
 <div id="tab-raw" class="panel">
- <div class="status" id="raw-status">Lade...</div>
- <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
-  <input id="raw-search" type="text" placeholder="Suchen..." oninput="renderRaw()" style="flex:1;padding:4px 8px;font-size:.75rem;border:1px solid #ccc;border-radius:4px">
- </div>
- <pre><code id="raw-json"></code></pre>
+<div class="status" id="raw-status">Lade …</div>
+<div class="searchbar">
+  <input id="raw-search" type="text" placeholder="Suchen …" oninput="renderRaw()">
+</div>
+<pre><code id="raw-json"></code></pre>
+</div>
+
 </div>
 <script>
 // HTML-Escaping fuer alle Werte, die aus HCU-Gruppendaten (Raumnamen,
 // Modus etc.) stammen und per innerHTML eingefuegt werden. Diese Werte sind
-// nicht vertrauenswuerdig (siehe Analyse-Report Punkt 1.5): wer HCU-Gruppen
-// umbenennen kann, koennte sonst HTML/JS ins Dashboard einschleusen.
+// nicht vertrauenswuerdig: wer HCU-Gruppen umbenennen kann, koennte sonst
+// HTML/JS ins Dashboard einschleusen.
 function esc(s){
  return String(s==null?'':s).replace(/[&<>"']/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
@@ -101,63 +236,73 @@ async function loadHCU(){
  try{
   const r=await fetch('/api/data'); const d=await r.json();
   const s=document.getElementById('hcu-status');
-  if(d.error){s.innerHTML='<span class=err>'+d.error+'</span>';return}
+  if(d.error){s.innerHTML='<span class="dot err"></span><span class="err-text">'+esc(d.error)+'</span>';return}
   const w=d.weather||{};
-  s.innerHTML='<span class=ok>&#10003;</span> Wetter: '+(w.temperature||'?')+'°C '+((w.humidity||'?')+'%').padStart(2);
+  s.innerHTML='<span class="dot"></span>Wetter '+(w.temperature!=null?w.temperature.toFixed(1):'?')+'°C · '+((w.humidity!=null?w.humidity:'?')+'% Feuchte');
   document.getElementById('hcu-tbody').innerHTML=d.heating.map(r=>
    '<tr><td class=l>'+esc(r.raum||'?')+'</td>'
    +'<td>'+(r.soll_temp!=null?r.soll_temp.toFixed(1):'-')+'</td><td>'+(r.ist_temp!=null?r.ist_temp.toFixed(1):'-')+'</td>'
-   +'<td class="'+esc((r.modus||'?').toLowerCase())+'">'+esc(r.modus||'?')+'</td>'
+   +'<td class="l '+esc((r.modus||'?').toLowerCase())+'">'+esc(r.modus||'?')+'</td>'
    +'<td>'+((r.ventil||0)*100).toFixed(0)+'%</td>'
-    +'<td>'+(r.boost?'<span class="badge bo">BOOST</span>':'')+'</td>'
-    +'<td>'+(r.party?'<span class="badge pa">PARTY</span>':'')+'</td>'
-    +'<td'+(r.fenster==='OPEN'?' style=color:#dc2626':'')+'>'+esc(r.fenster==='OPEN'?'OFFEN':r.fenster||'-')+'</td>'
-   +'<td>'+(r.unreach?'U ':'')+(r.lowbat?'B ':'')+(r.heating_failure?'HF ':'')+'</td>'
-   +'<td><input type=number step=0.5 value='+(r.soll_temp!=null?r.soll_temp.toFixed(1):'')+' style=width:58px onchange="setTemp(\''+r.id+'\',this.value)">'
-    +'<select onchange="setMode(\''+r.id+'\',this.value)"><option'+(r.modus==='AUTOMATIC'?' selected':'')+'>AUTOMATIC</option><option'+(r.modus==='ECO'?' selected':'')+'>ECO</option><option'+(r.modus==='MANUAL'?' selected':'')+'>MANUAL</option></select></td></tr>'
+    +'<td>'+(r.boost?'<span class="tag boost">BOOST</span>':'')+'</td>'
+    +'<td>'+(r.party?'<span class="tag party">PARTY</span>':'')+'</td>'
+    +'<td class="l'+(r.fenster==='OPEN'?' win-open':'')+'">'+esc(r.fenster==='OPEN'?'OFFEN':r.fenster||'-')+'</td>'
+   +'<td class=l>'+(r.unreach?'U ':'')+(r.lowbat?'B ':'')+(r.heating_failure?'HF ':'')+'</td>'
+   +'<td class=l><input type=number step=0.5 value='+(r.soll_temp!=null?r.soll_temp.toFixed(1):'')+' onchange="setTemp(\''+r.id+'\',this.value)">'
+    +' <select onchange="setMode(\''+r.id+'\',this.value)"><option'+(r.modus==='AUTOMATIC'?' selected':'')+'>AUTOMATIC</option><option'+(r.modus==='ECO'?' selected':'')+'>ECO</option><option'+(r.modus==='MANUAL'?' selected':'')+'>MANUAL</option></select></td></tr>'
   ).join('');
- }catch(e){document.getElementById('hcu-status').innerHTML='<span class=err>Fehler</span>'}
+ }catch(e){document.getElementById('hcu-status').innerHTML='<span class="dot err"></span><span class="err-text">Fehler</span>'}
  schedule(loadHCU,3000);
 }
 async function loadMB(){
  if(_blocked){schedule(loadMB,1000);return}
  try{
   const r=await fetch('/api/modbus'); const d=await r.json();
-  document.getElementById('mb-status').innerHTML='<span class=ok>&#10003;</span> '+d.aussentemp_c.toFixed(1)+'°C '+d.feuchte.toFixed(0)+'%';
+  document.getElementById('mb-status').innerHTML='<span class="dot"></span>'+d.aussentemp_c.toFixed(1)+'°C · '+d.feuchte.toFixed(0)+'% Feuchte';
   document.getElementById('mb-tbody').innerHTML=d.rooms.map((r,i)=>
-   '<tr><td style=white-space:nowrap>'
-   +(i>0?'<span class=arr onclick="moveRoom('+i+',\'up\')">&#9650;</span>':'<span style=opacity:.2>&#9650;</span>')
-   +(i<d.rooms.length-1?'<span class=arr onclick="moveRoom('+i+',\'down\')">&#9660;</span>':'<span style=opacity:.2>&#9660;</span>')
+   '<tr><td style="white-space:nowrap">'
+   +(i>0?'<span class=arr onclick="moveRoom('+i+',\'up\')">&#9650;</span>':'<span class="arr disabled">&#9650;</span>')
+   +(i<d.rooms.length-1?'<span class=arr onclick="moveRoom('+i+',\'down\')">&#9660;</span>':'<span class="arr disabled">&#9660;</span>')
    +'</td><td class=l>'+esc(r.name)+'</td>'
    +'<td>'+(r.room_id)+'</td>'
    +'<td>'+r.soll_c.toFixed(1)+'</td><td>'+r.ist_c.toFixed(1)+'</td>'
-   +'<td class='+(r.mode_raw===0?'auto':r.mode_raw===1?'eco':'manual')+'>'+r.mode+'</td>'
+   +'<td class="l '+(r.mode_raw===0?'auto':r.mode_raw===1?'eco':'manual')+'">'+r.mode+'</td>'
    +'<td>'+r.ventil_pct.toFixed(1)+'</td>'
-   +'<td>'+(r.boost?'<span class="badge bo">BOOST</span>':'')+'</td>'
-   +'<td>'+(r.party?'<span class="badge pa">PARTY</span>':'')+'</td>'
-   +'<td>'+(r.fenster===1?'OFFEN':r.fenster===0?'ZU':'-')+'</td>'
+   +'<td>'+(r.boost?'<span class="tag boost">BOOST</span>':'')+'</td>'
+   +'<td>'+(r.party?'<span class="tag party">PARTY</span>':'')+'</td>'
+   +'<td class=l>'+(r.fenster===1?'OFFEN':r.fenster===0?'ZU':'-')+'</td>'
    +'<td>'+r.fehler+'</td></tr>'
   ).join('');
- }catch(e){document.getElementById('mb-status').innerHTML='<span class=err>Fehler</span>'}
+ }catch(e){document.getElementById('mb-status').innerHTML='<span class="dot err"></span><span class="err-text">Fehler</span>'}
  schedule(loadMB,3000);
 }
+// Getrennte Feldnamen fuer HR und IR: an derselben Adresse (Offset 0-3 je
+// Raum bzw. die drei globalen Register) bedeuten HR und IR unterschiedliche
+// Dinge, brauchen also auch getrennte Beschriftungen (siehe Analyse-Report
+// Punkt H2).
+const HR_NAMES=['Soll','Modus','Boost','Party'];
+const IR_NAMES=['Ist','Ventil','Fenster','Fehler'];
+const GLOBAL_HR=['Raumanzahl','-','-'];
+const GLOBAL_IR=['Außentemp','Feuchte','Wetter'];
 async function loadRegs(){
  if(_blocked){schedule(loadRegs,1000);return}
  try{
   const r=await fetch('/api/registers'); const d=await r.json();
-  document.getElementById('reg-status').innerHTML='<span class=ok>&#10003;</span> '+d.regs.length+' Register';
+  document.getElementById('reg-status').innerHTML='<span class="dot"></span>'+d.regs.length+' Register';
   document.getElementById('reg-tbody').innerHTML=d.regs.map(r=>{
    const a=parseInt(r.a);
-   let label='';
+   let hrLabel='-', irLabel='-';
    if(a<4096){
-    const ri=Math.floor(a/4),off=a%4;
-    const names=['Soll','Modus','Boost','Party'];
-    label=(off===0?'HR ':'')+names[off];
-   }else if(a>=4096&&a<4099){label='Global'}
-   else if(a>=8192){label='Room-ID'}
-   return '<tr><td>'+a+'</td><td class=l>'+label+'</td><td>'+(r.hr==='-'?'-':r.hr)+'</td><td>'+(r.ir)+'</td></tr>'
+    const off=a%4;
+    hrLabel=HR_NAMES[off]; irLabel=IR_NAMES[off];
+   }else if(a>=4096&&a<4099){
+    hrLabel=GLOBAL_HR[a-4096]; irLabel=GLOBAL_IR[a-4096];
+   }else if(a>=8192){
+    hrLabel='-'; irLabel='Room-ID';
+   }
+   return '<tr><td class=l>'+a+'</td><td class=l>'+hrLabel+'</td><td>'+(r.hr==='-'?'-':r.hr)+'</td><td class=l>'+irLabel+'</td><td>'+(r.ir)+'</td></tr>'
   }).join('');
- }catch(e){document.getElementById('reg-status').innerHTML='<span class=err>Fehler</span>'}
+ }catch(e){document.getElementById('reg-status').innerHTML='<span class="dot err"></span><span class="err-text">Fehler</span>'}
  schedule(loadRegs,5000);
 }
 async function refresh(){await fetch('/api/refresh');loadHCU();loadMB();loadRegs();loadJSON()}
@@ -170,7 +315,7 @@ async function loadJSON(){
  if(_blocked){schedule(loadJSON,60000);return}
  try{
   const r=await fetch('/api/raw'); _rawData=await r.json(); renderRaw();
- }catch(e){document.getElementById('raw-status').innerHTML='<span class=err>Fehler</span>'}
+ }catch(e){document.getElementById('raw-status').innerHTML='<span class="dot err"></span><span class="err-text">Fehler</span>'}
  schedule(loadJSON,60000);
 }
 function renderRaw(){
@@ -184,7 +329,7 @@ function renderRaw(){
    if(ch.dutyCycleLevel!=null&&ch.dutyCycleLevel!==false)extra+=(extra?', ':'')+id+': '+ch.dutyCycleLevel+'%';
   }
  }
- document.getElementById('raw-status').innerHTML='<span class=ok>&#10003;</span> '+gc+' Gruppen, '+dc+' Gerate'+(extra?', '+extra:'')+', '+(d._last_update||'?');
+ document.getElementById('raw-status').innerHTML='<span class="dot"></span>'+gc+' Gruppen · '+dc+' Geräte'+(extra?' · '+extra:'')+' · '+esc(d._last_update||'?');
  const q=document.getElementById('raw-search').value.trim().toLowerCase();
  const s=JSON.stringify(d,null,2);
  document.getElementById('raw-json').textContent=q?s.split('\n').filter(l=>l.toLowerCase().includes(q)).join('\n'):s;

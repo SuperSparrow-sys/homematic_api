@@ -12,6 +12,7 @@ from registers import (
     OFF_SOLL, OFF_MODUS, OFF_BOOST, OFF_PARTY,
     OFF_IST, OFF_VENTIL, OFF_FENSTER, OFF_FEHLER,
     MODE_NAMES, HOLDING_GLOBAL, INPUT_GLOBAL, ROOM_ID_BASE,
+    to_u16, from_i16, room_code as _room_code, room_id as _room_id,
 )
 
 HCU_IP = "172.168.1.124"
@@ -76,9 +77,6 @@ _DEFAULT_ROOMS = [
 RAEUME = []
 ROOM_COUNT = 0
 ROOM_CODE_MAP = {}
-
-def _room_code(label):
-    return label.split(" ")[0] if label else ""
 
 def load_rooms():
     """Laedt rooms.txt in RAEUME/ROOM_COUNT/ROOM_CODE_MAP. Nur beim Start
@@ -157,6 +155,14 @@ def write_input(addr, val):   MB[2].setValues(addr + 1, [val])
 
 GID_BY_CODE = {}
 _INTERNAL_SET = False
+# Schuetzt _INTERNAL_SET gegen den SPS-Schreibthread (siehe Analyse-Report
+# Punkt G3): ohne Lock konnte ein SPS-Schreibzugriff, der exakt in das
+# kurze Fenster zwischen _INTERNAL_SET=True und =False fiel, faelschlich als
+# interner Echo erkannt und stillschweigend verworfen werden. RLock statt
+# Lock, weil der Sync-Thread ueber write_holding() synchron in denselben
+# HoldingBlock.setValues()-Callback zurueckspringt, der den Lock haelt -
+# ein einfaches Lock wuerde sich hier selbst blockieren (Deadlock).
+_INTERNAL_LOCK = threading.RLock()
 
 CMD_QUEUE = deque()
 CMD_LOCK = threading.Lock()
@@ -191,25 +197,45 @@ def _process_queue():
 
 def _on_modbus_write(addr, val):
     global _INTERNAL_SET
-    if _INTERNAL_SET:
-        return
-    room = (addr - 1) // ROOM_STRIDE
-    offset = (addr - 1) % ROOM_STRIDE
-    with ROOMS_LOCK:
-        if room < 0 or room >= ROOM_COUNT:
+    with _INTERNAL_LOCK:
+        if _INTERNAL_SET:
             return
-        code = _room_code(RAEUME[room])
-        gid = GID_BY_CODE.get(code)
-    if not gid:
-        return
-    if offset == OFF_SOLL:
-        _enqueue_cmd("temp", gid, val / 10)
-    elif offset == OFF_MODUS:
-        _enqueue_cmd("mode", gid, MODE_NAMES[val] if 0 <= val <= 2 else "ECO")
-    elif offset == OFF_BOOST:
-        _enqueue_cmd("boost", gid, bool(val))
-    elif offset == OFF_PARTY:
-        _enqueue_cmd("party", gid, bool(val))
+        room = (addr - 1) // ROOM_STRIDE
+        offset = (addr - 1) % ROOM_STRIDE
+        with ROOMS_LOCK:
+            if room < 0 or room >= ROOM_COUNT:
+                return
+            code = _room_code(RAEUME[room])
+            gid = GID_BY_CODE.get(code)
+        if not gid:
+            return
+        if offset == OFF_SOLL:
+            # Dieselbe Grenzpruefung wie /api/set-temp (siehe Analyse-Report
+            # Punkt M1): ohne sie wuerde ein fehlerhafter SPS-Rohwert
+            # ungeprueft als Sollwert an die HCU weitergereicht.
+            temp = from_i16(val) / 10
+            if not (MIN_TEMP <= temp <= MAX_TEMP):
+                logger.warning(
+                    "SPS schreibt ungueltige Solltemp %.1f fuer Raum %s "
+                    "(Rohwert %d) - verworfen, gueltig ist %.1f-%.1f.",
+                    temp, code, val, MIN_TEMP, MAX_TEMP,
+                )
+                return
+            _enqueue_cmd("temp", gid, temp)
+        elif offset == OFF_MODUS:
+            # Unbekannte Moduscodes werden verworfen statt sie still auf ECO
+            # abzubilden (siehe Analyse-Report Punkt M1).
+            if not (0 <= val <= 2):
+                logger.warning(
+                    "SPS schreibt unbekannten Modus-Code %d fuer Raum %s - verworfen.",
+                    val, code,
+                )
+                return
+            _enqueue_cmd("mode", gid, MODE_NAMES[val])
+        elif offset == OFF_BOOST:
+            _enqueue_cmd("boost", gid, bool(val))
+        elif offset == OFF_PARTY:
+            _enqueue_cmd("party", gid, bool(val))
 
 
 def rest_post(path, body):
@@ -304,14 +330,27 @@ def set_mode_sync(group_id, mode):
 # Modbus-Testschreibzugriff ausloesen und in der Homematic-App gegenpruefen).
 PARTY_MODE_DURATION_MINUTES = 120  # SPS liefert nur 0/1 ueber Modbus, keine Zeitangabe -> feste Default-Dauer
 
+def _mode_before_override(group_id):
+    """Liest den zuletzt bekannten Regelmodus einer Heizgruppe aus dem
+    HCU-Cache, um ihn nach Boost/Party wiederherzustellen (siehe Analyse-
+    Report Punkt M2), statt beim Beenden hart auf AUTOMATIC umzuschalten und
+    damit einen zuvor bewusst gesetzten MANUAL/ECO-Modus zu ueberschreiben.
+    Faellt auf AUTOMATIC zurueck, wenn der Cache keinen bekannten Modus liefert."""
+    with CACHE_LOCK:
+        grp = CACHE.get("groups", {}).get(group_id) or {}
+    mode = grp.get("controlMode")
+    return mode if mode in MODE_NAMES else "AUTOMATIC"
+
+
 def set_boost_sync(group_id, activate):
     auth_token, _ = load_token()
     if not auth_token: return False, "Kein Auth-Token"
     if activate:
         return asyncio.run(_send_ws_command(auth_token, "/hmip/group/heating/setBoost",
             {"groupId": group_id}))
-    # Boost-Deaktivierung ueber die HCU-API erfolgt durch Zurueckschalten in den Automatikmodus.
-    return set_mode_sync(group_id, "AUTOMATIC")
+    # Boost-Deaktivierung ueber die HCU-API erfolgt durch Zurueckschalten in
+    # den zuvor aktiven Modus (nicht mehr hart AUTOMATIC, siehe M2 oben).
+    return set_mode_sync(group_id, _mode_before_override(group_id))
 
 
 def set_party_sync(group_id, activate):
@@ -327,7 +366,7 @@ def set_party_sync(group_id, activate):
             "endTime": end.strftime("%Y_%m_%d %H:%M"),
         }
         return asyncio.run(_send_ws_command(auth_token, "/hmip/group/heating/setPartyMode", body))
-    return set_mode_sync(group_id, "AUTOMATIC")
+    return set_mode_sync(group_id, _mode_before_override(group_id))
 
 
 async def fetch_system_state(auth_token):
@@ -378,11 +417,19 @@ def sync_modbus_once(groups, weather):
         return
     with ROOMS_LOCK:
         for i in range(ROOM_COUNT):
-            write_input(ROOM_ID_BASE + i, i)
+            # room_id() statt des Index i selbst (siehe Analyse-Report Punkt
+            # H1): eine Pruefsumme aus dem Raumcode erkennt eine tatsaechliche
+            # Verschiebung der Raumreihenfolge, der Index selbst kann das
+            # strukturell nie tun, da er hier immer sich selbst zurueckschreibt.
+            write_input(ROOM_ID_BASE + i, _room_id(RAEUME[i]))
         write_holding(HOLDING_GLOBAL, ROOM_COUNT)
     if weather:
-        write_input(INPUT_GLOBAL, int(weather.get("temperature", 0) * 10))
-        write_input(INPUT_GLOBAL + 1, int(weather.get("humidity", 0)))
+        # to_u16(): Aussentemperatur kann negativ sein (siehe Analyse-Report
+        # Punkt K1) - ohne Zweierkomplement-Kodierung kann die SPS das
+        # Register dann nicht mehr lesen. round() statt int() vermeidet
+        # zudem den Abschneide-Bias bei negativen Werten (Punkt G2).
+        write_input(INPUT_GLOBAL, to_u16(round(weather.get("temperature", 0) * 10)))
+        write_input(INPUT_GLOBAL + 1, round(weather.get("humidity", 0)))
     for gid, grp in groups.items():
         if grp.get("type") != "HEATING":
             continue
@@ -407,24 +454,27 @@ def sync_modbus_once(groups, weather):
                 persist_rooms()
             GID_BY_CODE[code] = gid
         addr = i * ROOM_STRIDE
-        ist  = int((grp.get("valveActualTemperature") or 0) * 10)
-        vent = int((grp.get("valvePosition") or 0) * 1000)
+        # round() statt int() (Punkt G2), to_u16() fuer die Isttemperatur, da
+        # sie in unbeheizten Raeumen unter 0 Grad fallen kann (Punkt K1).
+        ist  = round((grp.get("valveActualTemperature") or 0) * 10)
+        vent = round((grp.get("valvePosition") or 0) * 1000)
         win  = {"OPEN": 1, "CLOSED": 0}.get(grp.get("windowState"), 65535)
         err  = (1 if grp.get("unreach") else 0) | (2 if grp.get("lowBat") else 0) | (4 if grp.get("heatingFailure") else 0)
-        write_input(addr + OFF_IST, ist)
+        write_input(addr + OFF_IST, to_u16(ist))
         write_input(addr + OFF_VENTIL, vent)
         write_input(addr + OFF_FENSTER, win)
         write_input(addr + OFF_FEHLER, err)
-        soll = int((grp.get("setPointTemperature") or 15) * 10)
+        soll = round((grp.get("setPointTemperature") or 15) * 10)
         mode = {"AUTOMATIC": 0, "ECO": 1, "MANUAL": 2}.get(grp.get("controlMode"), 1)
         boost = 1 if grp.get("boostMode") else 0
         party = 1 if grp.get("partyMode") else 0
-        _INTERNAL_SET = True
-        write_holding(addr + OFF_SOLL, soll)
-        write_holding(addr + OFF_MODUS, mode)
-        write_holding(addr + OFF_BOOST, boost)
-        write_holding(addr + OFF_PARTY, party)
-        _INTERNAL_SET = False
+        with _INTERNAL_LOCK:
+            _INTERNAL_SET = True
+            write_holding(addr + OFF_SOLL, to_u16(soll))
+            write_holding(addr + OFF_MODUS, mode)
+            write_holding(addr + OFF_BOOST, boost)
+            write_holding(addr + OFF_PARTY, party)
+            _INTERNAL_SET = False
 
 def sync_modbus_loop():
     global _INTERNAL_SET, ROOM_COUNT, ROOM_CODE_MAP
@@ -501,21 +551,27 @@ def api_modbus():
     for i, name in enumerate(raeume_snapshot):
         addr = i * ROOM_STRIDE
         mode_raw = read_holding(addr + OFF_MODUS)
+        # from_i16(): Soll-/Isttemperatur sind vorzeichenbehaftet im Register
+        # kodiert (siehe Analyse-Report Punkt K1) und muessen beim Anzeigen
+        # entsprechend zurueckgewandelt werden.
+        soll = from_i16(read_holding(addr + OFF_SOLL))
+        ist  = from_i16(read_input(addr + OFF_IST))
         rooms.append({
             "i": i, "name": name,
             "room_id": read_input(ROOM_ID_BASE + i),
-            "soll": read_holding(addr + OFF_SOLL), "soll_c": read_holding(addr + OFF_SOLL) / 10,
+            "soll": soll, "soll_c": soll / 10,
             "mode_raw": mode_raw,
             "mode": MODE_NAMES[mode_raw] if mode_raw <= 2 else "?",
             "boost": read_holding(addr + OFF_BOOST), "party": read_holding(addr + OFF_PARTY),
-            "ist": read_input(addr + OFF_IST), "ist_c": read_input(addr + OFF_IST) / 10,
+            "ist": ist, "ist_c": ist / 10,
             "ventil": read_input(addr + OFF_VENTIL), "ventil_pct": read_input(addr + OFF_VENTIL) / 10,
             "fenster": read_input(addr + OFF_FENSTER), "fehler": read_input(addr + OFF_FEHLER),
         })
+    aussentemp = from_i16(read_input(INPUT_GLOBAL))
     return jsonify({
         "rooms": rooms,
-        "aussentemp": read_input(INPUT_GLOBAL),
-        "aussentemp_c": read_input(INPUT_GLOBAL) / 10,
+        "aussentemp": aussentemp,
+        "aussentemp_c": aussentemp / 10,
         "feuchte": read_input(INPUT_GLOBAL + 1),
         "wetter": read_input(INPUT_GLOBAL + 2),
     })
@@ -546,7 +602,14 @@ def api_registers():
         for off in range(4):
             regs.append({"a": hex(a + off), "hr": read_holding(a + off), "ir": read_input(a + off)})
     for off in range(3):
-        regs.append({"a": hex(INPUT_GLOBAL + off), "hr": "-", "ir": read_input(INPUT_GLOBAL + off)})
+        # HOLDING_GLOBAL == INPUT_GLOBAL (beide 0x1000), aber HR und IR sind
+        # getrennte Adressraeume: an Offset 0 liegt sowohl die Raumanzahl (HR,
+        # read-only fuer die SPS) als auch die Aussentemperatur (IR). Bisher
+        # wurde hier fuer alle drei Zeilen hart "-" statt des echten HR-Werts
+        # ausgegeben, wodurch die Raumanzahl im Register-Dump nie sichtbar war
+        # (siehe Analyse-Report Punkt H2).
+        hr_val = read_holding(HOLDING_GLOBAL) if off == 0 else "-"
+        regs.append({"a": hex(INPUT_GLOBAL + off), "hr": hr_val, "ir": read_input(INPUT_GLOBAL + off)})
     for i in range(room_count):
         regs.append({"a": hex(ROOM_ID_BASE + i), "hr": "-", "ir": read_input(ROOM_ID_BASE + i)})
     return jsonify({"regs": regs})

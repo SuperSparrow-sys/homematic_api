@@ -137,25 +137,31 @@ Es sind Register für bis zu 64 Räume vorallokiert (`MAX_ROOMS` in
 
 | Offset | Holding (HR) – SPS schreibt | Input (IR) – SPS liest |
 |--------|---------------------------|------------------------|
-| +0 | Solltemp ×10 (z.B. 215 = 21.5°C) | Isttemp ×10 |
+| +0 | Solltemp ×10, **signed** (z.B. 215 = 21.5°C) | Isttemp ×10, **signed** |
 | +1 | Modus 0=AUTO / 1=ECO / 2=MANUAL | Ventil 0–1000 (0.0%–100.0%) |
 | +2 | Boost 0/1 | Fenster 0=ZU / 1=OFFEN / 65535=kein Sensor |
 | +3 | Party 0/1 | Fehler Bit0=unreach Bit1=lowBat Bit2=heatingFailure |
+
+Solltemp/Isttemp/Außentemp sind vorzeichenbehaftet (Frost, unbeheizte Räume):
+ein Rohwert über 32767 ist negativ und entspricht `wert - 65536`
+(Zweierkomplement, siehe `from_i16()`/`to_u16()` in `registers.py`).
 
 Globale Register:
 
 | Adresse | Typ | Wert |
 |---------|-----|------|
-| IR 0x1000 | int16 | Außentemperatur ×10 |
+| IR 0x1000 | **signed** int16 | Außentemperatur ×10 |
 | IR 0x1001 | int16 | Luftfeuchte |
 | IR 0x1002 | int16 | Wettercode |
 | HR 0x1000 | int16 | Anzahl Räume (read-only) |
-| IR 0x2000 + i | int16 | Room-ID = Index `i` (0–63, vorallokiert) – **Raumerkennung** |
+| IR 0x2000 + i | int16 | Room-ID = Prüfsumme aus dem Raumcode (0–63, vorallokiert) – **Verschiebungserkennung**, siehe REGISTERMAP.md |
 
-Room-ID-Prüfung durch SPS:
+Room-ID-Prüfung durch SPS: der gelesene Wert muss der in REGISTERMAP.md für
+diesen Raum dokumentierten Prüfsumme entsprechen (nicht dem Index selbst –
+der Index allein kann eine Verschiebung der Raumreihenfolge nicht erkennen).
 
 ```
-read_input_registers(0x2000 + i, 1) → muss Wert i liefern
+read_input_registers(0x2000 + i, 1) → muss die dokumentierte Prüfsumme für Raum i liefern
 ```
 
 ## Dateien
@@ -190,12 +196,14 @@ Beispiel für einen optimierten DB-Baustein (je Raum 4 HR lesen / 4 IR lesen):
 - `"MB_Input".Raum[0].Ist`  = IW 0 (INT)
 - Raum-Index 0 = A001 (Werkstatt), Index 1 = A101 (Schleiferei), …
 
-Vor dem Beschreiben eines HR immer die Room-ID prüfen:
+Vor dem Beschreiben eines HR immer die Room-ID gegen die in REGISTERMAP.md
+dokumentierte Prüfsumme für diesen Index prüfen (Beispielwert für Index 7 =
+A210, siehe REGISTERMAP.md):
 
 ```
 # S7-SCL
-IF "MB_Input".RoomID[7] = 7 THEN   // bestätigt Raum #7
-  "MB_Holding".Raum[7].Soll := 215; // 21.5°C
+IF "MB_Input".RoomID[7] = 59044 THEN   // bestätigt Raum #7 = A210
+  "MB_Holding".Raum[7].Soll := 215;    // 21.5°C
 END_IF;
 ```
 
