@@ -41,7 +41,7 @@ header{
 .brand p{font-family:var(--mono);font-size:.72rem;color:var(--text-muted);margin-top:2px}
 .toolbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 
-.tabs{display:flex;border:1px solid var(--border-strong)}
+.tabs{display:flex;border:1px solid var(--border-strong);border-radius:6px;overflow:hidden}
 .tabs button{
   font-family:var(--sans);font-size:.78rem;font-weight:600;color:var(--text);
   padding:7px 16px;border:0;background:var(--surface);cursor:pointer;
@@ -54,6 +54,7 @@ header{
 .btn{
   font-family:var(--sans);font-size:.78rem;font-weight:600;color:var(--text);
   padding:7px 14px;border:1px solid var(--border-strong);background:var(--surface);cursor:pointer;
+  border-radius:6px;
 }
 .btn:hover{background:var(--surface-2)}
 
@@ -101,10 +102,12 @@ tbody tr:hover{background:var(--surface-2)}
 input[type=number]{
   width:56px;padding:3px 5px;font-family:var(--mono);font-size:.78rem;text-align:right;
   border:1px solid var(--border-strong);background:var(--surface);color:var(--text);
+  border-radius:4px;
 }
 select{
   padding:3px 5px;font-family:var(--sans);font-size:.75rem;
   border:1px solid var(--border-strong);background:var(--surface);color:var(--text);
+  border-radius:4px;
 }
 input[type=number]:focus,select:focus,#raw-search:focus{outline:2px solid var(--text);outline-offset:-1px}
 
@@ -127,6 +130,7 @@ input[type=number]:focus,select:focus,#raw-search:focus{outline:2px solid var(--
 .searchbar input{
   width:100%;max-width:340px;padding:6px 10px;font-family:var(--mono);font-size:.78rem;
   border:1px solid var(--border-strong);background:var(--surface);color:var(--text);
+  border-radius:4px;
 }
 pre{
   background:#1a1d22;color:#d6d9de;padding:14px;font-family:var(--mono);font-size:.72rem;
