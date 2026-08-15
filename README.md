@@ -66,6 +66,46 @@ ersetzen.
 
 Der Sync-Lauf aktualisiert alle 2 Sekunden die Modbus-Register aus dem HCU-Cache.
 
+## Produktivbetrieb (systemd)
+
+Im Dauerbetrieb läuft die Bridge als systemd-Service statt manuell per
+`python main.py`. Der Service-Name lautet **`homematic-bridge.service`**
+(nicht `automation.system` o.ä.), Unit-Datei unter
+`/etc/systemd/system/homematic-bridge.service`:
+
+```ini
+[Unit]
+Description=Homematic HCU Modbus Bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/regenery/homematic_api
+ExecStart=/home/regenery/homematic_api/.venv/bin/python main.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`User=root` ist hier nötig, weil `main.py` Port 502 direkt bindet, ohne die
+`setcap`-Capability aus dem Installationsschritt oben zu nutzen – alternativ
+`setcap` setzen und auf einen unprivilegierten `User=` umstellen.
+
+Einrichtung/Verwaltung:
+
+```bash
+sudo systemctl daemon-reload                    # nach Anlegen/Ändern der Unit-Datei
+sudo systemctl enable --now homematic-bridge.service   # aktivieren + starten
+sudo systemctl status homematic-bridge.service
+sudo systemctl restart homematic-bridge.service
+sudo journalctl -u homematic-bridge.service -f  # Live-Logs
+systemctl cat homematic-bridge.service          # Inhalt der Unit-Datei anzeigen
+```
+
 ## TLS
 
 Die Verbindung zur HCU wird standardmäßig **nicht** zertifikatsverifiziert, da
